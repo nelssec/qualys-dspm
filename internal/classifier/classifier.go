@@ -2,6 +2,7 @@ package classifier
 
 import (
 	"regexp"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -495,7 +496,7 @@ func ValidateIBAN(iban string) bool {
 	var numeric strings.Builder
 	for _, c := range rearranged {
 		if c >= 'A' && c <= 'Z' {
-			numeric.WriteString(string(rune(int(c-'A') + 10)))
+			numeric.WriteString(strconv.Itoa(int(c-'A') + 10))
 		} else {
 			numeric.WriteRune(c)
 		}
