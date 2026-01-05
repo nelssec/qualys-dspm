@@ -14,8 +14,6 @@ import (
 	"github.com/qualys/dspm/internal/scheduler"
 )
 
-// --- Authentication Handlers ---
-
 type loginRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
@@ -71,10 +69,10 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 
 	var req refreshRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		// Logout all sessions
+
 		_ = s.authService.LogoutAll(r.Context(), claims.UserID)
 	} else {
-		// Logout specific session
+
 		_ = s.authService.Logout(r.Context(), claims.UserID, req.RefreshToken)
 	}
 
@@ -136,7 +134,6 @@ func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Don't return password
 	user.Password = ""
 	respondJSON(w, http.StatusCreated, user)
 }
@@ -151,8 +148,6 @@ func (s *Server) listUsers(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, users)
 }
 
-// --- Scheduler Handlers ---
-
 func (s *Server) listScheduledJobs(w http.ResponseWriter, r *http.Request) {
 	jobs, err := s.schedulerStore.ListJobs(r.Context())
 	if err != nil {
@@ -164,12 +159,12 @@ func (s *Server) listScheduledJobs(w http.ResponseWriter, r *http.Request) {
 }
 
 type createJobRequest struct {
-	Name        string                    `json:"name"`
-	Description string                    `json:"description"`
-	Schedule    string                    `json:"schedule"`
-	JobType     scheduler.JobType         `json:"job_type"`
-	Config      map[string]string         `json:"config"`
-	Enabled     bool                      `json:"enabled"`
+	Name        string            `json:"name"`
+	Description string            `json:"description"`
+	Schedule    string            `json:"schedule"`
+	JobType     scheduler.JobType `json:"job_type"`
+	Config      map[string]string `json:"config"`
+	Enabled     bool              `json:"enabled"`
 }
 
 func (s *Server) createScheduledJob(w http.ResponseWriter, r *http.Request) {
@@ -273,8 +268,6 @@ func (s *Server) getJobExecutions(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, execs)
 }
 
-// --- Custom Rules Handlers ---
-
 func (s *Server) listRules(w http.ResponseWriter, r *http.Request) {
 	rulesList, err := s.rulesEngine.GetRules(r.Context())
 	if err != nil {
@@ -309,7 +302,6 @@ func (s *Server) createRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate patterns
 	for _, p := range req.Patterns {
 		if err := rules.ValidatePattern(p); err != nil {
 			respondError(w, http.StatusBadRequest, "validation_error", "Invalid pattern: "+err.Error())
@@ -438,8 +430,6 @@ func (s *Server) getRuleTemplates(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, templates)
 }
 
-// --- Report Handlers ---
-
 type generateReportRequest struct {
 	Type       reports.ReportType   `json:"type"`
 	Format     reports.ReportFormat `json:"format"`
@@ -468,22 +458,6 @@ func (s *Server) generateReport(w http.ResponseWriter, r *http.Request) {
 		req.Title = string(req.Type) + " Report"
 	}
 
-	// Convert string arrays to typed arrays
-	severities := make([]models.Sensitivity, len(req.Severities))
-	for i, s := range req.Severities {
-		severities[i] = models.Sensitivity(s)
-	}
-
-	categories := make([]models.Category, len(req.Categories))
-	for i, c := range req.Categories {
-		categories[i] = models.Category(c)
-	}
-
-	statuses := make([]models.FindingStatus, len(req.Statuses))
-	for i, st := range req.Statuses {
-		statuses[i] = models.FindingStatus(st)
-	}
-
 	reportReq := &reports.ReportRequest{
 		Type:       req.Type,
 		Format:     req.Format,
@@ -491,9 +465,9 @@ func (s *Server) generateReport(w http.ResponseWriter, r *http.Request) {
 		AccountIDs: req.AccountIDs,
 		DateFrom:   req.DateFrom,
 		DateTo:     req.DateTo,
-		Severities: severities,
-		Categories: categories,
-		Statuses:   statuses,
+		Severities: req.Severities,
+		Categories: req.Categories,
+		Statuses:   req.Statuses,
 	}
 
 	report, err := s.reportGenerator.Generate(r.Context(), reportReq)
@@ -502,7 +476,6 @@ func (s *Server) generateReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Set appropriate headers for file download
 	w.Header().Set("Content-Type", report.MimeType)
 	w.Header().Set("Content-Disposition", "attachment; filename="+report.Filename)
 	w.Header().Set("Content-Length", string(rune(len(report.Data))))
@@ -532,30 +505,27 @@ func (s *Server) streamCSVReport(w http.ResponseWriter, r *http.Request) {
 		Format: reports.FormatCSV,
 	}
 
-	// Set streaming headers
 	w.Header().Set("Content-Type", "text/csv")
 	w.Header().Set("Content-Disposition", "attachment; filename="+reportType+"_export.csv")
 	w.Header().Set("Transfer-Encoding", "chunked")
 
 	if err := s.reportGenerator.StreamCSV(r.Context(), w, req); err != nil {
-		// Can't send error after headers, just log
+
 		s.logger.Error("streaming error", "error", err)
 	}
 }
 
-// --- Notification Settings Handlers ---
-
 type notificationSettingsRequest struct {
-	SlackEnabled    bool   `json:"slack_enabled"`
-	SlackWebhookURL string `json:"slack_webhook_url"`
-	SlackChannel    string `json:"slack_channel"`
-	EmailEnabled    bool   `json:"email_enabled"`
+	SlackEnabled    bool     `json:"slack_enabled"`
+	SlackWebhookURL string   `json:"slack_webhook_url"`
+	SlackChannel    string   `json:"slack_channel"`
+	EmailEnabled    bool     `json:"email_enabled"`
 	EmailRecipients []string `json:"email_recipients"`
-	MinSeverity     string `json:"min_severity"`
+	MinSeverity     string   `json:"min_severity"`
 }
 
 func (s *Server) getNotificationSettings(w http.ResponseWriter, r *http.Request) {
-	// Return current notification config (without secrets)
+
 	settings := map[string]interface{}{
 		"slack_enabled":    s.notificationConfig.Slack.Enabled,
 		"slack_channel":    s.notificationConfig.Slack.Channel,
@@ -573,7 +543,6 @@ func (s *Server) updateNotificationSettings(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Update config - in production this would persist to DB
 	s.notificationConfig.Slack.Enabled = req.SlackEnabled
 	if req.SlackWebhookURL != "" {
 		s.notificationConfig.Slack.WebhookURL = req.SlackWebhookURL
@@ -597,8 +566,6 @@ func (s *Server) testNotification(w http.ResponseWriter, r *http.Request) {
 		channel = "slack"
 	}
 
-	// Send test notification
-	// In a real implementation, this would use the notification service
 	respondJSON(w, http.StatusOK, map[string]string{
 		"status":  "sent",
 		"channel": channel,

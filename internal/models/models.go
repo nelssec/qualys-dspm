@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// Provider represents a cloud provider
 type Provider string
 
 const (
@@ -18,7 +17,6 @@ const (
 	ProviderGCP   Provider = "GCP"
 )
 
-// Sensitivity levels for data classification
 type Sensitivity string
 
 const (
@@ -29,7 +27,6 @@ const (
 	SensitivityUnknown  Sensitivity = "UNKNOWN"
 )
 
-// Category represents data classification categories
 type Category string
 
 const (
@@ -40,34 +37,31 @@ const (
 	CategoryCustom  Category = "CUSTOM"
 )
 
-// ResourceType represents types of cloud resources
 type ResourceType string
 
 const (
-	ResourceTypeS3Bucket        ResourceType = "s3_bucket"
-	ResourceTypeAzureBlob       ResourceType = "azure_blob_container"
-	ResourceTypeGCSBucket       ResourceType = "gcs_bucket"
-	ResourceTypeLambda          ResourceType = "lambda_function"
-	ResourceTypeAzureFunction   ResourceType = "azure_function"
-	ResourceTypeCloudFunction   ResourceType = "cloud_function"
-	ResourceTypeRDS             ResourceType = "rds_instance"
-	ResourceTypeDynamoDB        ResourceType = "dynamodb_table"
-	ResourceTypeAzureSQL        ResourceType = "azure_sql_database"
-	ResourceTypeCloudSQL        ResourceType = "cloud_sql_instance"
-	ResourceTypeBigQuery        ResourceType = "bigquery_dataset"
+	ResourceTypeS3Bucket      ResourceType = "s3_bucket"
+	ResourceTypeAzureBlob     ResourceType = "azure_blob_container"
+	ResourceTypeGCSBucket     ResourceType = "gcs_bucket"
+	ResourceTypeLambda        ResourceType = "lambda_function"
+	ResourceTypeAzureFunction ResourceType = "azure_function"
+	ResourceTypeCloudFunction ResourceType = "cloud_function"
+	ResourceTypeRDS           ResourceType = "rds_instance"
+	ResourceTypeDynamoDB      ResourceType = "dynamodb_table"
+	ResourceTypeAzureSQL      ResourceType = "azure_sql_database"
+	ResourceTypeCloudSQL      ResourceType = "cloud_sql_instance"
+	ResourceTypeBigQuery      ResourceType = "bigquery_dataset"
 )
 
-// EncryptionStatus represents the encryption state of a resource
 type EncryptionStatus string
 
 const (
 	EncryptionNone   EncryptionStatus = "NONE"
-	EncryptionSSE    EncryptionStatus = "SSE"      // Server-side encryption (provider managed)
-	EncryptionSSEKMS EncryptionStatus = "SSE_KMS"  // Server-side with KMS
-	EncryptionCMK    EncryptionStatus = "CMK"      // Customer managed key
+	EncryptionSSE    EncryptionStatus = "SSE"
+	EncryptionSSEKMS EncryptionStatus = "SSE_KMS"
+	EncryptionCMK    EncryptionStatus = "CMK"
 )
 
-// PermissionLevel represents access permission levels
 type PermissionLevel string
 
 const (
@@ -77,7 +71,6 @@ const (
 	PermissionFull  PermissionLevel = "FULL"
 )
 
-// FindingSeverity represents the severity of a security finding
 type FindingSeverity string
 
 const (
@@ -88,7 +81,6 @@ const (
 	SeverityInfo     FindingSeverity = "INFO"
 )
 
-// FindingStatus represents the status of a finding
 type FindingStatus string
 
 const (
@@ -99,7 +91,6 @@ const (
 	FindingStatusFalsePositive FindingStatus = "false_positive"
 )
 
-// ScanStatus represents the status of a scan job
 type ScanStatus string
 
 const (
@@ -110,7 +101,6 @@ const (
 	ScanStatusCancelled ScanStatus = "cancelled"
 )
 
-// ScanType represents types of scans
 type ScanType string
 
 const (
@@ -121,10 +111,8 @@ const (
 	ScanTypeAccessAnalysis ScanType = "ACCESS_ANALYSIS"
 )
 
-// JSONB is a wrapper type for JSONB columns
 type JSONB map[string]interface{}
 
-// Value implements driver.Valuer
 func (j JSONB) Value() (driver.Value, error) {
 	if j == nil {
 		return nil, nil
@@ -132,7 +120,6 @@ func (j JSONB) Value() (driver.Value, error) {
 	return json.Marshal(j)
 }
 
-// Scan implements sql.Scanner
 func (j *JSONB) Scan(value interface{}) error {
 	if value == nil {
 		*j = nil
@@ -145,22 +132,20 @@ func (j *JSONB) Scan(value interface{}) error {
 	return json.Unmarshal(bytes, j)
 }
 
-// CloudAccount represents a connected cloud account
 type CloudAccount struct {
-	ID              uuid.UUID `json:"id" db:"id"`
-	Provider        Provider  `json:"provider" db:"provider"`
-	ExternalID      string    `json:"external_id" db:"external_id"`
-	DisplayName     string    `json:"display_name" db:"display_name"`
-	ConnectorConfig JSONB     `json:"connector_config" db:"connector_config"`
-	Status          string    `json:"status" db:"status"`
-	StatusMessage   string    `json:"status_message,omitempty" db:"status_message"`
+	ID              uuid.UUID  `json:"id" db:"id"`
+	Provider        Provider   `json:"provider" db:"provider"`
+	ExternalID      string     `json:"external_id" db:"external_id"`
+	DisplayName     string     `json:"display_name" db:"display_name"`
+	ConnectorConfig JSONB      `json:"connector_config" db:"connector_config"`
+	Status          string     `json:"status" db:"status"`
+	StatusMessage   string     `json:"status_message,omitempty" db:"status_message"`
 	LastScanAt      *time.Time `json:"last_scan_at,omitempty" db:"last_scan_at"`
-	LastScanStatus  string    `json:"last_scan_status,omitempty" db:"last_scan_status"`
-	CreatedAt       time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at" db:"updated_at"`
+	LastScanStatus  string     `json:"last_scan_status,omitempty" db:"last_scan_status"`
+	CreatedAt       time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at" db:"updated_at"`
 }
 
-// DataAsset represents a discovered data asset (bucket, database, etc.)
 type DataAsset struct {
 	ID                  uuid.UUID        `json:"id" db:"id"`
 	AccountID           uuid.UUID        `json:"account_id" db:"account_id"`
@@ -188,7 +173,6 @@ type DataAsset struct {
 	UpdatedAt           time.Time        `json:"updated_at" db:"updated_at"`
 }
 
-// Classification represents a data classification finding
 type Classification struct {
 	ID              uuid.UUID   `json:"id" db:"id"`
 	AssetID         uuid.UUID   `json:"asset_id" db:"asset_id"`
@@ -205,7 +189,6 @@ type Classification struct {
 	DiscoveredAt    time.Time   `json:"discovered_at" db:"discovered_at"`
 }
 
-// AccessPolicy represents an IAM policy
 type AccessPolicy struct {
 	ID                 uuid.UUID `json:"id" db:"id"`
 	AccountID          uuid.UUID `json:"account_id" db:"account_id"`
@@ -222,7 +205,6 @@ type AccessPolicy struct {
 	UpdatedAt          time.Time `json:"updated_at" db:"updated_at"`
 }
 
-// AccessEdge represents an access relationship between a principal and an asset
 type AccessEdge struct {
 	ID              uuid.UUID       `json:"id" db:"id"`
 	SourceType      string          `json:"source_type" db:"source_type"`
@@ -241,7 +223,6 @@ type AccessEdge struct {
 	DiscoveredAt    time.Time       `json:"discovered_at" db:"discovered_at"`
 }
 
-// Finding represents a security finding or risk
 type Finding struct {
 	ID                   uuid.UUID       `json:"id" db:"id"`
 	AccountID            uuid.UUID       `json:"account_id" db:"account_id"`
@@ -264,7 +245,6 @@ type Finding struct {
 	LastSeenAt           time.Time       `json:"last_seen_at" db:"last_seen_at"`
 }
 
-// ScanJob represents a scan job
 type ScanJob struct {
 	ID                   uuid.UUID  `json:"id" db:"id"`
 	AccountID            uuid.UUID  `json:"account_id" db:"account_id"`
@@ -281,4 +261,22 @@ type ScanJob struct {
 	CompletedAt          *time.Time `json:"completed_at,omitempty" db:"completed_at"`
 	TriggeredBy          string     `json:"triggered_by" db:"triggered_by"`
 	WorkerID             string     `json:"worker_id,omitempty" db:"worker_id"`
+}
+
+type AccountStatus string
+
+const (
+	AccountStatusActive   AccountStatus = "active"
+	AccountStatusInactive AccountStatus = "inactive"
+	AccountStatusError    AccountStatus = "error"
+)
+
+type AssetType = ResourceType
+
+type ClassificationSummary struct {
+	MaxSensitivity Sensitivity    `json:"max_sensitivity"`
+	Categories     []Category     `json:"categories"`
+	TotalFindings  int            `json:"total_findings"`
+	BySensitivity  map[string]int `json:"by_sensitivity,omitempty"`
+	ByCategory     map[string]int `json:"by_category,omitempty"`
 }

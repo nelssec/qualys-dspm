@@ -21,47 +21,37 @@ import (
 	"github.com/qualys/dspm/internal/store"
 )
 
-// Server represents the API server
 type Server struct {
-	cfg                *config.Config
-	router             *chi.Mux
-	store              *store.Store
-	http               *http.Server
-	logger             *slog.Logger
+	cfg    *config.Config
+	router *chi.Mux
+	store  *store.Store
+	http   *http.Server
+	logger *slog.Logger
 
-	// Auth
 	authService *auth.Service
 	userStore   auth.UserStore
 
-	// Scheduler
 	scheduler      *scheduler.Scheduler
 	schedulerStore scheduler.Store
 
-	// Rules
 	rulesEngine *rules.Engine
 	rulesStore  rules.Store
 
-	// Reports
 	reportGenerator *reports.Generator
 
-	// Notifications
 	notificationService *notifications.Service
 	notificationConfig  notifications.Config
 }
 
-// ServerOption configures the server
 type ServerOption func(*Server)
 
-// WithLogger sets the logger
 func WithLogger(logger *slog.Logger) ServerOption {
 	return func(s *Server) {
 		s.logger = logger
 	}
 }
 
-// NewServer creates a new API server
 func NewServer(cfg *config.Config, opts ...ServerOption) (*Server, error) {
-	// Initialize store
 	st, err := store.New(store.Config{
 		DSN:          cfg.Database.DSN(),
 		MaxOpenConns: cfg.Database.MaxOpenConns,
@@ -82,7 +72,6 @@ func NewServer(cfg *config.Config, opts ...ServerOption) (*Server, error) {
 		opt(s)
 	}
 
-	// Initialize auth
 	s.userStore = auth.NewPostgresUserStore(st.DB())
 	s.authService = auth.NewService(auth.Config{
 		JWTSecret:          cfg.Auth.JWTSecret,
@@ -90,15 +79,12 @@ func NewServer(cfg *config.Config, opts ...ServerOption) (*Server, error) {
 		RefreshTokenExpiry: cfg.Auth.RefreshTokenExpiry,
 	}, s.userStore)
 
-	// Initialize scheduler
 	s.schedulerStore = scheduler.NewPostgresStore(st.DB())
 	s.scheduler = scheduler.NewScheduler(s.schedulerStore, s.logger)
 
-	// Initialize rules engine
 	s.rulesStore = rules.NewPostgresStore(st.DB())
 	s.rulesEngine = rules.NewEngine(s.rulesStore)
 
-	// Initialize notifications
 	s.notificationConfig = notifications.Config{
 		Slack: notifications.SlackConfig{
 			WebhookURL:  cfg.Notifications.Slack.WebhookURL,
@@ -121,7 +107,6 @@ func NewServer(cfg *config.Config, opts ...ServerOption) (*Server, error) {
 	}
 	s.notificationService = notifications.NewService(s.notificationConfig, s.logger)
 
-	// Initialize report generator
 	s.reportGenerator = reports.NewGenerator(&reportDataProvider{store: st})
 
 	s.setupMiddleware()
@@ -143,51 +128,54 @@ func (s *Server) setupMiddleware() {
 	s.router.Use(middleware.Logger)
 	s.router.Use(middleware.Recoverer)
 	s.router.Use(middleware.Timeout(60 * time.Second))
-	s.router.Use(corsMiddleware)
+	s.router.Use(s.corsMiddleware())
 }
 
-func corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Accept, Authorization, Content-Type")
+func (s *Server) corsMiddleware() func(http.Handler) http.Handler {
+	allowOrigin := s.cfg.Server.CORSAllowOrigin
+	if allowOrigin == "" {
+		allowOrigin = "*"
+		s.logger.Warn("CORS Allow-Origin set to '*' - configure server.cors_allow_origin in production")
+	}
 
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Access-Control-Allow-Origin", allowOrigin)
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Accept, Authorization, Content-Type")
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
 
-		w.Header().Set("Content-Type", "application/json")
-		next.ServeHTTP(w, r)
-	})
+			if r.Method == "OPTIONS" {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 func (s *Server) setupRoutes() {
 	s.router.Get("/health", s.healthCheck)
 	s.router.Get("/ready", s.readyCheck)
 
-	// API v1 routes
 	s.router.Route("/api/v1", func(r chi.Router) {
-		// Public routes (no auth required)
 		r.Post("/auth/login", s.login)
 		r.Post("/auth/refresh", s.refresh)
 
-		// Protected routes
 		r.Group(func(r chi.Router) {
 			r.Use(s.authService.Middleware)
 
-			// Auth
 			r.Post("/auth/logout", s.logout)
 			r.Get("/auth/me", s.getCurrentUser)
 
-			// User management (admin only)
 			r.Group(func(r chi.Router) {
 				r.Use(auth.RequireRole(auth.RoleAdmin))
 				r.Get("/users", s.listUsers)
 				r.Post("/users", s.createUser)
 			})
 
-			// Accounts
 			r.Route("/accounts", func(r chi.Router) {
 				r.Get("/", s.listAccounts)
 				r.Post("/", s.createAccount)
@@ -196,34 +184,29 @@ func (s *Server) setupRoutes() {
 				r.Post("/{accountID}/scan", s.triggerScan)
 			})
 
-			// Assets
 			r.Route("/assets", func(r chi.Router) {
 				r.Get("/", s.listAssets)
 				r.Get("/{assetID}", s.getAsset)
 				r.Get("/{assetID}/classifications", s.getAssetClassifications)
 			})
 
-			// Findings
 			r.Route("/findings", func(r chi.Router) {
 				r.Get("/", s.listFindings)
 				r.Get("/{findingID}", s.getFinding)
 				r.Patch("/{findingID}/status", s.updateFindingStatus)
 			})
 
-			// Scans
 			r.Route("/scans", func(r chi.Router) {
 				r.Get("/", s.listScans)
 				r.Get("/{scanID}", s.getScan)
 			})
 
-			// Dashboard / Stats
 			r.Route("/dashboard", func(r chi.Router) {
 				r.Get("/summary", s.getDashboardSummary)
 				r.Get("/classification-stats", s.getClassificationStats)
 				r.Get("/finding-stats", s.getFindingStats)
 			})
 
-			// Scheduled Jobs
 			r.Route("/jobs", func(r chi.Router) {
 				r.Get("/", s.listScheduledJobs)
 				r.Post("/", s.createScheduledJob)
@@ -234,7 +217,6 @@ func (s *Server) setupRoutes() {
 				r.Get("/{jobID}/executions", s.getJobExecutions)
 			})
 
-			// Custom Rules
 			r.Route("/rules", func(r chi.Router) {
 				r.Get("/", s.listRules)
 				r.Post("/", s.createRule)
@@ -245,14 +227,12 @@ func (s *Server) setupRoutes() {
 				r.Delete("/{ruleID}", s.deleteRule)
 			})
 
-			// Reports
 			r.Route("/reports", func(r chi.Router) {
 				r.Get("/types", s.getReportTypes)
 				r.Post("/generate", s.generateReport)
 				r.Get("/stream", s.streamCSVReport)
 			})
 
-			// Notification Settings
 			r.Route("/notifications", func(r chi.Router) {
 				r.Use(auth.RequireRole(auth.RoleAdmin))
 				r.Get("/settings", s.getNotificationSettings)
@@ -263,14 +243,11 @@ func (s *Server) setupRoutes() {
 	})
 }
 
-// Run starts the server
 func (s *Server) Run(ctx context.Context) error {
-	// Start scheduler
 	if err := s.scheduler.Start(ctx); err != nil {
 		s.logger.Error("failed to start scheduler", "error", err)
 	}
 
-	// Load custom rules
 	if err := s.rulesEngine.LoadRules(ctx); err != nil {
 		s.logger.Error("failed to load custom rules", "error", err)
 	}
@@ -295,13 +272,11 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 }
 
-// reportDataProvider implements reports.DataProvider
 type reportDataProvider struct {
 	store *store.Store
 }
 
-func (p *reportDataProvider) GetFindings(ctx context.Context, filters reports.FindingsFilter) ([]*models.Finding, error) {
-	// Convert filters and call store
+func (p *reportDataProvider) GetFindings(ctx context.Context, filters reports.FindingsFilter) ([]*reports.ReportFinding, error) {
 	storeFilters := store.ListFindingFilters{
 		Limit: 10000,
 	}
@@ -310,17 +285,21 @@ func (p *reportDataProvider) GetFindings(ctx context.Context, filters reports.Fi
 		return nil, err
 	}
 
-	// Convert to reports model
-	result := make([]*models.Finding, len(findings))
+	result := make([]*reports.ReportFinding, len(findings))
 	for i, f := range findings {
-		result[i] = &models.Finding{
+		assetID := ""
+		if f.AssetID != nil {
+			assetID = f.AssetID.String()
+		}
+		result[i] = &reports.ReportFinding{
 			ID:          f.ID.String(),
-			Title:       f.FindingType,
-			Description: f.Details["description"].(string),
-			Severity:    models.Sensitivity(f.Severity),
-			Category:    models.Category(f.FindingType),
-			Status:      f.Status,
-			AssetID:     f.AssetID.String(),
+			Title:       f.Title,
+			Description: f.Description,
+			Severity:    string(f.Severity),
+			Category:    f.FindingType,
+			Status:      string(f.Status),
+			AssetID:     assetID,
+			Remediation: f.Remediation,
 			CreatedAt:   f.CreatedAt,
 			UpdatedAt:   f.UpdatedAt,
 		}
@@ -328,7 +307,7 @@ func (p *reportDataProvider) GetFindings(ctx context.Context, filters reports.Fi
 	return result, nil
 }
 
-func (p *reportDataProvider) GetAssets(ctx context.Context, filters reports.AssetsFilter) ([]*models.DataAsset, error) {
+func (p *reportDataProvider) GetAssets(ctx context.Context, filters reports.AssetsFilter) ([]*reports.ReportAsset, error) {
 	storeFilters := store.ListAssetFilters{
 		Limit: 10000,
 	}
@@ -337,40 +316,36 @@ func (p *reportDataProvider) GetAssets(ctx context.Context, filters reports.Asse
 		return nil, err
 	}
 
-	result := make([]*models.DataAsset, len(assets))
+	result := make([]*reports.ReportAsset, len(assets))
 	for i, a := range assets {
-		result[i] = &models.DataAsset{
-			ID:        a.ID.String(),
-			Name:      a.ResourceID,
-			AssetType: a.ResourceType,
-			Provider:  models.Provider(a.AccountID.String()),
-			Region:    a.Region,
-			Classification: models.ClassificationSummary{
-				MaxSensitivity: a.SensitivityLevel,
-			},
-			CreatedAt: a.CreatedAt,
+		result[i] = &reports.ReportAsset{
+			ID:            a.ID.String(),
+			Name:          a.Name,
+			AssetType:     string(a.ResourceType),
+			Provider:      "cloud",
+			AccountID:     a.AccountID.String(),
+			Region:        a.Region,
+			Sensitivity:   string(a.SensitivityLevel),
+			LastScannedAt: a.LastScannedAt,
+			CreatedAt:     a.CreatedAt,
 		}
 	}
 	return result, nil
 }
 
-func (p *reportDataProvider) GetClassifications(ctx context.Context, assetID string) ([]*models.Classification, error) {
-	return nil, nil
-}
-
-func (p *reportDataProvider) GetAccounts(ctx context.Context) ([]*models.CloudAccount, error) {
+func (p *reportDataProvider) GetAccounts(ctx context.Context) ([]*reports.ReportAccount, error) {
 	accounts, err := p.store.ListAccounts(ctx, nil, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	result := make([]*models.CloudAccount, len(accounts))
+	result := make([]*reports.ReportAccount, len(accounts))
 	for i, a := range accounts {
-		result[i] = &models.CloudAccount{
+		result[i] = &reports.ReportAccount{
 			ID:       a.ID.String(),
 			Name:     a.DisplayName,
-			Provider: a.Provider,
-			Status:   models.AccountStatus(a.Status),
+			Provider: string(a.Provider),
+			Status:   a.Status,
 		}
 	}
 	return result, nil
@@ -378,19 +353,16 @@ func (p *reportDataProvider) GetAccounts(ctx context.Context) ([]*models.CloudAc
 
 func (p *reportDataProvider) GetStats(ctx context.Context) (*reports.Stats, error) {
 	stats := &reports.Stats{
-		ClassificationCounts: make(map[models.Category]int),
-		SensitivityCounts:    make(map[models.Sensitivity]int),
+		ClassificationCounts: make(map[string]int),
+		SensitivityCounts:    make(map[string]int),
 	}
 
-	// Get accounts count
 	accounts, _ := p.store.ListAccounts(ctx, nil, nil)
 	stats.TotalAccounts = len(accounts)
 
-	// Get assets count
 	_, total, _ := p.store.ListAssets(ctx, store.ListAssetFilters{Limit: 1})
 	stats.TotalAssets = total
 
-	// Get findings
 	findings, findingTotal, _ := p.store.ListFindings(ctx, store.ListFindingFilters{Limit: 10000})
 	stats.TotalFindings = findingTotal
 	for _, f := range findings {
@@ -411,16 +383,13 @@ func (p *reportDataProvider) GetStats(ctx context.Context) (*reports.Stats, erro
 		}
 	}
 
-	// Get classification stats
 	classStats, _ := p.store.GetClassificationStats(ctx, nil)
 	for cat, count := range classStats {
-		stats.ClassificationCounts[models.Category(cat)] = count
+		stats.ClassificationCounts[cat] = count
 	}
 
 	return stats, nil
 }
-
-// Response helpers
 
 type apiResponse struct {
 	Success bool        `json:"success"`
@@ -467,8 +436,6 @@ func respondError(w http.ResponseWriter, status int, code, message string) {
 		},
 	})
 }
-
-// Health checks
 
 func (s *Server) healthCheck(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]string{

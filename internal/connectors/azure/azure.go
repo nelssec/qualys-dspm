@@ -16,19 +16,16 @@ import (
 	"github.com/qualys/dspm/internal/models"
 )
 
-// Connector implements the Azure cloud connector
 type Connector struct {
 	credential     *azidentity.ClientSecretCredential
 	subscriptionID string
 	tenantID       string
 
-	// Service clients
 	storageClient *armstorage.AccountsClient
 	blobClients   map[string]*azblob.Client
 	authClient    *armauthorization.RoleAssignmentsClient
 }
 
-// Config holds Azure connector configuration
 type Config struct {
 	TenantID       string
 	ClientID       string
@@ -36,7 +33,6 @@ type Config struct {
 	SubscriptionID string
 }
 
-// New creates a new Azure connector
 func New(ctx context.Context, cfg Config) (*Connector, error) {
 	credential, err := azidentity.NewClientSecretCredential(cfg.TenantID, cfg.ClientID, cfg.ClientSecret, nil)
 	if err != nil {
@@ -63,17 +59,14 @@ func New(ctx context.Context, cfg Config) (*Connector, error) {
 	}, nil
 }
 
-// Provider returns the cloud provider type
 func (c *Connector) Provider() models.Provider {
 	return models.ProviderAzure
 }
 
-// SubscriptionID returns the Azure subscription ID
 func (c *Connector) SubscriptionID() string {
 	return c.subscriptionID
 }
 
-// Validate tests the connection and permissions
 func (c *Connector) Validate(ctx context.Context) error {
 	pager := c.storageClient.NewListPager(nil)
 	_, err := pager.NextPage(ctx)
@@ -83,12 +76,10 @@ func (c *Connector) Validate(ctx context.Context) error {
 	return nil
 }
 
-// Close releases any resources
 func (c *Connector) Close() error {
 	return nil
 }
 
-// getBlobClient returns a blob client for a storage account
 func (c *Connector) getBlobClient(ctx context.Context, accountName string) (*azblob.Client, error) {
 	if client, ok := c.blobClients[accountName]; ok {
 		return client, nil
@@ -104,13 +95,9 @@ func (c *Connector) getBlobClient(ctx context.Context, accountName string) (*azb
 	return client, nil
 }
 
-// --- Storage Operations ---
-
-// ListBuckets returns all storage accounts and their containers
 func (c *Connector) ListBuckets(ctx context.Context) ([]connectors.BucketInfo, error) {
 	var buckets []connectors.BucketInfo
 
-	// List storage accounts
 	pager := c.storageClient.NewListPager(nil)
 	for pager.More() {
 		page, err := pager.NextPage(ctx)
@@ -122,13 +109,11 @@ func (c *Connector) ListBuckets(ctx context.Context) ([]connectors.BucketInfo, e
 			accountName := *account.Name
 			location := *account.Location
 
-			// Get blob client for this account
 			blobClient, err := c.getBlobClient(ctx, accountName)
 			if err != nil {
 				continue // Skip accounts we can't access
 			}
 
-			// List containers in this account
 			containerPager := blobClient.NewListContainersPager(nil)
 			for containerPager.More() {
 				containerPage, err := containerPager.NextPage(ctx)
@@ -140,7 +125,7 @@ func (c *Connector) ListBuckets(ctx context.Context) ([]connectors.BucketInfo, e
 					buckets = append(buckets, connectors.BucketInfo{
 						Name:   fmt.Sprintf("%s/%s", accountName, *container.Name),
 						Region: location,
-						ARN:    fmt.Sprintf("/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Storage/storageAccounts/%s/blobServices/default/containers/%s",
+						ARN: fmt.Sprintf("/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Storage/storageAccounts/%s/blobServices/default/containers/%s",
 							c.subscriptionID, extractResourceGroup(*account.ID), accountName, *container.Name),
 					})
 				}
@@ -151,7 +136,6 @@ func (c *Connector) ListBuckets(ctx context.Context) ([]connectors.BucketInfo, e
 	return buckets, nil
 }
 
-// GetBucketMetadata returns detailed metadata for a container
 func (c *Connector) GetBucketMetadata(ctx context.Context, bucketName string) (*connectors.BucketMetadata, error) {
 	parts := strings.SplitN(bucketName, "/", 2)
 	if len(parts) != 2 {
@@ -159,7 +143,6 @@ func (c *Connector) GetBucketMetadata(ctx context.Context, bucketName string) (*
 	}
 	accountName, containerName := parts[0], parts[1]
 
-	// Get storage account details
 	pager := c.storageClient.NewListPager(nil)
 	var account *armstorage.Account
 	for pager.More() {
@@ -185,11 +168,10 @@ func (c *Connector) GetBucketMetadata(ctx context.Context, bucketName string) (*
 	metadata := &connectors.BucketMetadata{
 		Name:   bucketName,
 		Region: *account.Location,
-		ARN:    fmt.Sprintf("/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Storage/storageAccounts/%s/blobServices/default/containers/%s",
+		ARN: fmt.Sprintf("/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Storage/storageAccounts/%s/blobServices/default/containers/%s",
 			c.subscriptionID, extractResourceGroup(*account.ID), accountName, containerName),
 	}
 
-	// Check encryption
 	if account.Properties != nil && account.Properties.Encryption != nil {
 		metadata.Encryption.Enabled = true
 		if account.Properties.Encryption.KeySource != nil {
@@ -205,14 +187,12 @@ func (c *Connector) GetBucketMetadata(ctx context.Context, bucketName string) (*
 		}
 	}
 
-	// Check public access
 	if account.Properties != nil {
 		if account.Properties.AllowBlobPublicAccess != nil {
 			metadata.PublicAccessBlock.BlockPublicAcls = !*account.Properties.AllowBlobPublicAccess
 		}
 	}
 
-	// Get container properties
 	blobClient, err := c.getBlobClient(ctx, accountName)
 	if err == nil {
 		containerClient := blobClient.ServiceClient().NewContainerClient(containerName)
@@ -224,7 +204,6 @@ func (c *Connector) GetBucketMetadata(ctx context.Context, bucketName string) (*
 		}
 	}
 
-	// Get tags
 	if account.Tags != nil {
 		metadata.Tags = make(map[string]string)
 		for k, v := range account.Tags {
@@ -237,7 +216,6 @@ func (c *Connector) GetBucketMetadata(ctx context.Context, bucketName string) (*
 	return metadata, nil
 }
 
-// ListObjects lists blobs in a container
 func (c *Connector) ListObjects(ctx context.Context, bucketName, prefix string, maxKeys int) ([]connectors.ObjectInfo, error) {
 	parts := strings.SplitN(bucketName, "/", 2)
 	if len(parts) != 2 {
@@ -288,7 +266,6 @@ func (c *Connector) ListObjects(ctx context.Context, bucketName, prefix string, 
 	return objects, nil
 }
 
-// GetObject retrieves a blob's content
 func (c *Connector) GetObject(ctx context.Context, bucketName, objectKey string, byteRange *connectors.ByteRange) (io.ReadCloser, error) {
 	parts := strings.SplitN(bucketName, "/", 2)
 	if len(parts) != 2 {
@@ -322,7 +299,6 @@ func (c *Connector) GetObject(ctx context.Context, bucketName, objectKey string,
 	return resp.Body, nil
 }
 
-// GetBucketPolicy returns the container access policy
 func (c *Connector) GetBucketPolicy(ctx context.Context, bucketName string) (*connectors.BucketPolicy, error) {
 	parts := strings.SplitN(bucketName, "/", 2)
 	if len(parts) != 2 {
@@ -357,7 +333,6 @@ func (c *Connector) GetBucketPolicy(ctx context.Context, bucketName string) (*co
 	return policy, nil
 }
 
-// GetBucketACL returns the container ACL
 func (c *Connector) GetBucketACL(ctx context.Context, bucketName string) (*connectors.BucketACL, error) {
 	parts := strings.SplitN(bucketName, "/", 2)
 	if len(parts) != 2 {
@@ -389,9 +364,6 @@ func (c *Connector) GetBucketACL(ctx context.Context, bucketName string) (*conne
 	return result, nil
 }
 
-// --- IAM Operations ---
-
-// ListUsers returns all users (via role assignments)
 func (c *Connector) ListUsers(ctx context.Context) ([]connectors.Principal, error) {
 	var principals []connectors.Principal
 
@@ -418,7 +390,6 @@ func (c *Connector) ListUsers(ctx context.Context) ([]connectors.Principal, erro
 	return principals, nil
 }
 
-// ListRoles returns all role definitions
 func (c *Connector) ListRoles(ctx context.Context) ([]connectors.Principal, error) {
 	var roles []connectors.Principal
 
@@ -451,7 +422,6 @@ func (c *Connector) ListRoles(ctx context.Context) ([]connectors.Principal, erro
 	return roles, nil
 }
 
-// ListPolicies returns role definitions as policies
 func (c *Connector) ListPolicies(ctx context.Context) ([]connectors.PolicyInfo, error) {
 	var policies []connectors.PolicyInfo
 
@@ -471,10 +441,14 @@ func (c *Connector) ListPolicies(ctx context.Context) ([]connectors.PolicyInfo, 
 
 		for _, role := range page.Value {
 			if role.Properties != nil {
+				roleType := ""
+				if role.Properties.RoleType != nil {
+					roleType = string(*role.Properties.RoleType)
+				}
 				policies = append(policies, connectors.PolicyInfo{
 					ARN:         *role.ID,
 					Name:        ptrToString(role.Properties.RoleName),
-					Type:        string(*role.Properties.Type),
+					Type:        roleType,
 					Description: ptrToString(role.Properties.Description),
 				})
 			}
@@ -484,7 +458,6 @@ func (c *Connector) ListPolicies(ctx context.Context) ([]connectors.PolicyInfo, 
 	return policies, nil
 }
 
-// GetPolicy returns a role definition
 func (c *Connector) GetPolicy(ctx context.Context, policyARN string) (*connectors.PolicyDocument, error) {
 	roleDefsClient, err := armauthorization.NewRoleDefinitionsClient(c.credential, nil)
 	if err != nil {
@@ -519,7 +492,6 @@ func (c *Connector) GetPolicy(ctx context.Context, policyARN string) (*connector
 	return doc, nil
 }
 
-// ListAttachedPolicies returns role assignments for a principal
 func (c *Connector) ListAttachedPolicies(ctx context.Context, principalARN string) ([]connectors.PolicyInfo, error) {
 	var policies []connectors.PolicyInfo
 
@@ -548,7 +520,6 @@ func (c *Connector) ListAttachedPolicies(ctx context.Context, principalARN strin
 	return policies, nil
 }
 
-// GetServiceAccounts returns service principals
 func (c *Connector) GetServiceAccounts(ctx context.Context) ([]connectors.Principal, error) {
 	var principals []connectors.Principal
 
@@ -574,8 +545,6 @@ func (c *Connector) GetServiceAccounts(ctx context.Context) ([]connectors.Princi
 
 	return principals, nil
 }
-
-// Helper functions
 
 func extractResourceGroup(resourceID string) string {
 	parts := strings.Split(resourceID, "/")

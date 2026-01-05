@@ -11,7 +11,6 @@ import (
 	"github.com/qualys/dspm/internal/models"
 )
 
-// CustomRule represents a user-defined classification rule
 type CustomRule struct {
 	ID              string             `json:"id" db:"id"`
 	Name            string             `json:"name" db:"name"`
@@ -28,14 +27,12 @@ type CustomRule struct {
 	UpdatedAt       time.Time          `json:"updated_at" db:"updated_at"`
 }
 
-// CompiledRule is a rule with compiled regex patterns
 type CompiledRule struct {
 	Rule            *CustomRule
 	Patterns        []*regexp.Regexp
 	ContextPatterns []*regexp.Regexp
 }
 
-// Store defines the interface for rule persistence
 type Store interface {
 	GetRule(ctx context.Context, id string) (*CustomRule, error)
 	ListRules(ctx context.Context, enabledOnly bool) ([]*CustomRule, error)
@@ -46,13 +43,11 @@ type Store interface {
 	SetRulePatterns(ctx context.Context, ruleID string, patterns, contextPatterns []string) error
 }
 
-// Engine manages custom rules and classification
 type Engine struct {
 	store         Store
 	compiledRules []*CompiledRule
 }
 
-// NewEngine creates a new rules engine
 func NewEngine(store Store) *Engine {
 	return &Engine{
 		store:         store,
@@ -60,7 +55,6 @@ func NewEngine(store Store) *Engine {
 	}
 }
 
-// LoadRules loads and compiles all enabled rules
 func (e *Engine) LoadRules(ctx context.Context) error {
 	rules, err := e.store.ListRules(ctx, true)
 	if err != nil {
@@ -87,7 +81,6 @@ func (e *Engine) LoadRules(ctx context.Context) error {
 	return nil
 }
 
-// compileRule compiles a rule's patterns
 func (e *Engine) compileRule(rule *CustomRule) (*CompiledRule, error) {
 	compiled := &CompiledRule{
 		Rule:            rule,
@@ -114,7 +107,6 @@ func (e *Engine) compileRule(rule *CustomRule) (*CompiledRule, error) {
 	return compiled, nil
 }
 
-// Match represents a classification match
 type Match struct {
 	RuleID      string
 	RuleName    string
@@ -125,7 +117,6 @@ type Match struct {
 	Confidence  float64
 }
 
-// Classify classifies content using custom rules
 func (e *Engine) Classify(content string) []*Match {
 	var matches []*Match
 
@@ -139,12 +130,10 @@ func (e *Engine) Classify(content string) []*Match {
 	return matches
 }
 
-// matchRule checks if content matches a rule
 func (e *Engine) matchRule(compiled *CompiledRule, content string) *Match {
 	var foundMatches []string
 	var contextMatches []string
 
-	// Check main patterns
 	for _, re := range compiled.Patterns {
 		if matches := re.FindAllString(content, -1); len(matches) > 0 {
 			foundMatches = append(foundMatches, matches...)
@@ -155,7 +144,6 @@ func (e *Engine) matchRule(compiled *CompiledRule, content string) *Match {
 		return nil
 	}
 
-	// Check context patterns if required
 	if compiled.Rule.ContextRequired && len(compiled.ContextPatterns) > 0 {
 		hasContext := false
 		for _, re := range compiled.ContextPatterns {
@@ -169,7 +157,6 @@ func (e *Engine) matchRule(compiled *CompiledRule, content string) *Match {
 		}
 	}
 
-	// Calculate confidence based on matches and context
 	confidence := e.calculateConfidence(len(foundMatches), len(contextMatches), compiled.Rule.ContextRequired)
 
 	return &Match{
@@ -183,11 +170,10 @@ func (e *Engine) matchRule(compiled *CompiledRule, content string) *Match {
 	}
 }
 
-// calculateConfidence calculates match confidence
 func (e *Engine) calculateConfidence(matchCount, contextCount int, contextRequired bool) float64 {
 	base := 0.5
 	if matchCount > 1 {
-		base += 0.1 * float64(min(matchCount-1, 5))
+		base += 0.1 * float64(minInt(matchCount-1, 5))
 	}
 	if contextCount > 0 {
 		base += 0.2
@@ -195,12 +181,10 @@ func (e *Engine) calculateConfidence(matchCount, contextCount int, contextRequir
 	if contextRequired && contextCount > 0 {
 		base += 0.1
 	}
-	return min(base, 1.0)
+	return minFloat(base, 1.0)
 }
 
-// CreateRule creates a new custom rule
 func (e *Engine) CreateRule(ctx context.Context, rule *CustomRule) error {
-	// Validate patterns
 	for _, p := range rule.Patterns {
 		if _, err := regexp.Compile(p); err != nil {
 			return fmt.Errorf("invalid pattern %q: %w", p, err)
@@ -220,7 +204,6 @@ func (e *Engine) CreateRule(ctx context.Context, rule *CustomRule) error {
 		return err
 	}
 
-	// Reload rules if enabled
 	if rule.Enabled {
 		return e.LoadRules(ctx)
 	}
@@ -228,9 +211,7 @@ func (e *Engine) CreateRule(ctx context.Context, rule *CustomRule) error {
 	return nil
 }
 
-// UpdateRule updates an existing rule
 func (e *Engine) UpdateRule(ctx context.Context, rule *CustomRule) error {
-	// Validate patterns
 	for _, p := range rule.Patterns {
 		if _, err := regexp.Compile(p); err != nil {
 			return fmt.Errorf("invalid pattern %q: %w", p, err)
@@ -253,7 +234,6 @@ func (e *Engine) UpdateRule(ctx context.Context, rule *CustomRule) error {
 	return e.LoadRules(ctx)
 }
 
-// DeleteRule deletes a rule
 func (e *Engine) DeleteRule(ctx context.Context, id string) error {
 	if err := e.store.DeleteRule(ctx, id); err != nil {
 		return err
@@ -261,7 +241,6 @@ func (e *Engine) DeleteRule(ctx context.Context, id string) error {
 	return e.LoadRules(ctx)
 }
 
-// EnableRule enables a rule
 func (e *Engine) EnableRule(ctx context.Context, id string) error {
 	rule, err := e.store.GetRule(ctx, id)
 	if err != nil {
@@ -274,7 +253,6 @@ func (e *Engine) EnableRule(ctx context.Context, id string) error {
 	return e.LoadRules(ctx)
 }
 
-// DisableRule disables a rule
 func (e *Engine) DisableRule(ctx context.Context, id string) error {
 	rule, err := e.store.GetRule(ctx, id)
 	if err != nil {
@@ -287,7 +265,6 @@ func (e *Engine) DisableRule(ctx context.Context, id string) error {
 	return e.LoadRules(ctx)
 }
 
-// TestRule tests a rule against sample content
 func (e *Engine) TestRule(ctx context.Context, rule *CustomRule, content string) (*Match, error) {
 	compiled, err := e.compileRule(rule)
 	if err != nil {
@@ -296,14 +273,12 @@ func (e *Engine) TestRule(ctx context.Context, rule *CustomRule, content string)
 	return e.matchRule(compiled, content), nil
 }
 
-// GetRules returns all rules
 func (e *Engine) GetRules(ctx context.Context) ([]*CustomRule, error) {
 	rules, err := e.store.ListRules(ctx, false)
 	if err != nil {
 		return nil, err
 	}
 
-	// Load patterns for each rule
 	for _, rule := range rules {
 		patterns, contextPatterns, err := e.store.GetRulePatterns(ctx, rule.ID)
 		if err != nil {
@@ -316,7 +291,6 @@ func (e *Engine) GetRules(ctx context.Context) ([]*CustomRule, error) {
 	return rules, nil
 }
 
-// GetRule returns a single rule by ID
 func (e *Engine) GetRule(ctx context.Context, id string) (*CustomRule, error) {
 	rule, err := e.store.GetRule(ctx, id)
 	if err != nil {
@@ -333,7 +307,6 @@ func (e *Engine) GetRule(ctx context.Context, id string) (*CustomRule, error) {
 	return rule, nil
 }
 
-// ValidatePattern validates a regex pattern
 func ValidatePattern(pattern string) error {
 	if pattern == "" {
 		return errors.New("pattern cannot be empty")
@@ -345,18 +318,17 @@ func ValidatePattern(pattern string) error {
 	return nil
 }
 
-// PredefinedRules returns built-in classification rules
 func PredefinedRules() []*CustomRule {
 	return []*CustomRule{
 		{
-			Name:        "Social Security Numbers",
-			Description: "Detects US Social Security Numbers",
-			Category:    models.CategoryPII,
-			Sensitivity: models.SensitivityHigh,
-			Patterns:    []string{`\b\d{3}-\d{2}-\d{4}\b`, `\b\d{9}\b`},
+			Name:            "Social Security Numbers",
+			Description:     "Detects US Social Security Numbers",
+			Category:        models.CategoryPII,
+			Sensitivity:     models.SensitivityHigh,
+			Patterns:        []string{`\b\d{3}-\d{2}-\d{4}\b`, `\b\d{9}\b`},
 			ContextPatterns: []string{`(?i)ssn|social\s*security|tax\s*id`},
 			ContextRequired: true,
-			Priority:    100,
+			Priority:        100,
 		},
 		{
 			Name:        "Credit Card Numbers",
@@ -391,14 +363,14 @@ func PredefinedRules() []*CustomRule {
 			Priority:    100,
 		},
 		{
-			Name:        "Medical Record Numbers",
-			Description: "Detects medical record numbers with context",
-			Category:    models.CategoryPHI,
-			Sensitivity: models.SensitivityHigh,
-			Patterns:    []string{`\b[A-Z]{2,3}[0-9]{6,10}\b`},
+			Name:            "Medical Record Numbers",
+			Description:     "Detects medical record numbers with context",
+			Category:        models.CategoryPHI,
+			Sensitivity:     models.SensitivityHigh,
+			Patterns:        []string{`\b[A-Z]{2,3}[0-9]{6,10}\b`},
 			ContextPatterns: []string{`(?i)medical|patient|mrn|health|hospital|clinic|diagnosis`},
 			ContextRequired: true,
-			Priority:    80,
+			Priority:        80,
 		},
 		{
 			Name:        "IP Addresses",
@@ -411,14 +383,20 @@ func PredefinedRules() []*CustomRule {
 	}
 }
 
-func min(a, b int) int {
+func minInt(a, b int) int {
 	if a < b {
 		return a
 	}
 	return b
 }
 
-// RuleTemplate is a pre-made rule configuration
+func minFloat(a, b float64) float64 {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 type RuleTemplate struct {
 	Name        string   `json:"name"`
 	Description string   `json:"description"`
@@ -426,7 +404,6 @@ type RuleTemplate struct {
 	Hint        string   `json:"hint"`
 }
 
-// GetTemplates returns available rule templates
 func GetTemplates() []RuleTemplate {
 	return []RuleTemplate{
 		{
@@ -468,12 +445,10 @@ func GetTemplates() []RuleTemplate {
 	}
 }
 
-// MarshalPatterns converts patterns to JSON for storage
 func MarshalPatterns(patterns []string) ([]byte, error) {
 	return json.Marshal(patterns)
 }
 
-// UnmarshalPatterns converts JSON to patterns
 func UnmarshalPatterns(data []byte) ([]string, error) {
 	var patterns []string
 	if err := json.Unmarshal(data, &patterns); err != nil {

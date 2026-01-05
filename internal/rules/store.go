@@ -11,26 +11,24 @@ import (
 	"github.com/qualys/dspm/internal/models"
 )
 
-// PostgresStore implements Store with PostgreSQL
 type PostgresStore struct {
 	db *sqlx.DB
 }
 
-// NewPostgresStore creates a new PostgreSQL rules store
 func NewPostgresStore(db *sqlx.DB) *PostgresStore {
 	return &PostgresStore{db: db}
 }
 
 type ruleRow struct {
-	ID              string `db:"id"`
-	Name            string `db:"name"`
-	Description     string `db:"description"`
-	Category        string `db:"category"`
-	Sensitivity     string `db:"sensitivity"`
-	ContextRequired bool   `db:"context_required"`
-	Enabled         bool   `db:"enabled"`
-	Priority        int    `db:"priority"`
-	CreatedBy       string `db:"created_by"`
+	ID              string    `db:"id"`
+	Name            string    `db:"name"`
+	Description     string    `db:"description"`
+	Category        string    `db:"category"`
+	Sensitivity     string    `db:"sensitivity"`
+	ContextRequired bool      `db:"context_required"`
+	Enabled         bool      `db:"enabled"`
+	Priority        int       `db:"priority"`
+	CreatedBy       string    `db:"created_by"`
 	CreatedAt       time.Time `db:"created_at"`
 	UpdatedAt       time.Time `db:"updated_at"`
 }
@@ -51,7 +49,6 @@ func (r *ruleRow) toRule() *CustomRule {
 	}
 }
 
-// GetRule retrieves a rule by ID
 func (s *PostgresStore) GetRule(ctx context.Context, id string) (*CustomRule, error) {
 	var row ruleRow
 	err := s.db.GetContext(ctx, &row, `
@@ -67,7 +64,6 @@ func (s *PostgresStore) GetRule(ctx context.Context, id string) (*CustomRule, er
 	return row.toRule(), nil
 }
 
-// ListRules lists rules
 func (s *PostgresStore) ListRules(ctx context.Context, enabledOnly bool) ([]*CustomRule, error) {
 	var rows []ruleRow
 	var err error
@@ -95,7 +91,6 @@ func (s *PostgresStore) ListRules(ctx context.Context, enabledOnly bool) ([]*Cus
 	return rules, nil
 }
 
-// CreateRule creates a new rule
 func (s *PostgresStore) CreateRule(ctx context.Context, rule *CustomRule) error {
 	if rule.ID == "" {
 		rule.ID = uuid.New().String()
@@ -112,7 +107,6 @@ func (s *PostgresStore) CreateRule(ctx context.Context, rule *CustomRule) error 
 	return err
 }
 
-// UpdateRule updates a rule
 func (s *PostgresStore) UpdateRule(ctx context.Context, rule *CustomRule) error {
 	rule.UpdatedAt = time.Now()
 	_, err := s.db.ExecContext(ctx, `
@@ -125,7 +119,6 @@ func (s *PostgresStore) UpdateRule(ctx context.Context, rule *CustomRule) error 
 	return err
 }
 
-// DeleteRule deletes a rule
 func (s *PostgresStore) DeleteRule(ctx context.Context, id string) error {
 	tx, err := s.db.BeginTxx(ctx, nil)
 	if err != nil {
@@ -133,12 +126,10 @@ func (s *PostgresStore) DeleteRule(ctx context.Context, id string) error {
 	}
 	defer tx.Rollback()
 
-	// Delete patterns first
 	if _, err := tx.ExecContext(ctx, `DELETE FROM rule_patterns WHERE rule_id = $1`, id); err != nil {
 		return err
 	}
 
-	// Delete rule
 	if _, err := tx.ExecContext(ctx, `DELETE FROM custom_rules WHERE id = $1`, id); err != nil {
 		return err
 	}
@@ -146,7 +137,6 @@ func (s *PostgresStore) DeleteRule(ctx context.Context, id string) error {
 	return tx.Commit()
 }
 
-// GetRulePatterns retrieves patterns for a rule
 func (s *PostgresStore) GetRulePatterns(ctx context.Context, ruleID string) ([]string, []string, error) {
 	var patterns, contextPatterns []string
 
@@ -174,7 +164,6 @@ func (s *PostgresStore) GetRulePatterns(ctx context.Context, ruleID string) ([]s
 	return patterns, contextPatterns, rows.Err()
 }
 
-// SetRulePatterns sets patterns for a rule
 func (s *PostgresStore) SetRulePatterns(ctx context.Context, ruleID string, patterns, contextPatterns []string) error {
 	tx, err := s.db.BeginTxx(ctx, nil)
 	if err != nil {
@@ -182,12 +171,10 @@ func (s *PostgresStore) SetRulePatterns(ctx context.Context, ruleID string, patt
 	}
 	defer tx.Rollback()
 
-	// Delete existing patterns
 	if _, err := tx.ExecContext(ctx, `DELETE FROM rule_patterns WHERE rule_id = $1`, ruleID); err != nil {
 		return err
 	}
 
-	// Insert new patterns
 	for _, p := range patterns {
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO rule_patterns (id, rule_id, pattern, is_context) VALUES ($1, $2, $3, false)
@@ -196,7 +183,6 @@ func (s *PostgresStore) SetRulePatterns(ctx context.Context, ruleID string, patt
 		}
 	}
 
-	// Insert context patterns
 	for _, p := range contextPatterns {
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO rule_patterns (id, rule_id, pattern, is_context) VALUES ($1, $2, $3, true)

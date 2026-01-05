@@ -8,13 +8,11 @@ import (
 	"github.com/jung-kurt/gofpdf"
 )
 
-// PDFReport handles PDF generation
 type PDFReport struct {
 	pdf   *gofpdf.Fpdf
 	title string
 }
 
-// NewPDFReport creates a new PDF report
 func NewPDFReport(title string) *PDFReport {
 	pdf := gofpdf.New("P", "mm", "A4", "")
 	pdf.SetMargins(15, 15, 15)
@@ -29,16 +27,13 @@ func NewPDFReport(title string) *PDFReport {
 	return r
 }
 
-// addHeader adds the report header
 func (r *PDFReport) addHeader() {
 	r.pdf.AddPage()
 
-	// Title
 	r.pdf.SetFont("Arial", "B", 20)
 	r.pdf.SetTextColor(33, 37, 41)
 	r.pdf.CellFormat(0, 15, r.title, "", 1, "C", false, 0, "")
 
-	// Generated timestamp
 	r.pdf.SetFont("Arial", "", 10)
 	r.pdf.SetTextColor(108, 117, 125)
 	r.pdf.CellFormat(0, 8, fmt.Sprintf("Generated: %s", time.Now().Format("January 2, 2006 3:04 PM")), "", 1, "C", false, 0, "")
@@ -46,7 +41,6 @@ func (r *PDFReport) addHeader() {
 	r.pdf.Ln(10)
 }
 
-// AddSection adds a section header
 func (r *PDFReport) AddSection(title string) {
 	r.pdf.SetFont("Arial", "B", 14)
 	r.pdf.SetTextColor(33, 37, 41)
@@ -55,7 +49,6 @@ func (r *PDFReport) AddSection(title string) {
 	r.pdf.Ln(5)
 }
 
-// AddParagraph adds a text paragraph
 func (r *PDFReport) AddParagraph(text string) {
 	r.pdf.SetFont("Arial", "", 10)
 	r.pdf.SetTextColor(33, 37, 41)
@@ -63,13 +56,10 @@ func (r *PDFReport) AddParagraph(text string) {
 	r.pdf.Ln(5)
 }
 
-// AddTable adds a data table
 func (r *PDFReport) AddTable(headers []string, rows [][]string) {
-	// Calculate column widths
 	pageWidth := 180.0 // A4 width minus margins
 	colWidth := pageWidth / float64(len(headers))
 
-	// Header row
 	r.pdf.SetFont("Arial", "B", 9)
 	r.pdf.SetFillColor(52, 58, 64)
 	r.pdf.SetTextColor(255, 255, 255)
@@ -78,7 +68,6 @@ func (r *PDFReport) AddTable(headers []string, rows [][]string) {
 	}
 	r.pdf.Ln(-1)
 
-	// Data rows
 	r.pdf.SetFont("Arial", "", 9)
 	r.pdf.SetTextColor(33, 37, 41)
 	fill := false
@@ -89,7 +78,6 @@ func (r *PDFReport) AddTable(headers []string, rows [][]string) {
 			r.pdf.SetFillColor(255, 255, 255)
 		}
 		for _, cell := range row {
-			// Truncate if too long
 			if len(cell) > 25 {
 				cell = cell[:22] + "..."
 			}
@@ -102,16 +90,13 @@ func (r *PDFReport) AddTable(headers []string, rows [][]string) {
 	r.pdf.Ln(5)
 }
 
-// AddSummaryTable adds a key-value summary table
 func (r *PDFReport) AddSummaryTable(data map[string]int) {
 	r.pdf.SetFont("Arial", "", 10)
 
 	for key, value := range data {
-		// Key
 		r.pdf.SetTextColor(108, 117, 125)
 		r.pdf.CellFormat(60, 7, key+":", "", 0, "L", false, 0, "")
 
-		// Value
 		r.pdf.SetFont("Arial", "B", 10)
 		r.pdf.SetTextColor(33, 37, 41)
 		r.pdf.CellFormat(0, 7, fmt.Sprintf("%d", value), "", 1, "L", false, 0, "")
@@ -121,13 +106,11 @@ func (r *PDFReport) AddSummaryTable(data map[string]int) {
 	r.pdf.Ln(5)
 }
 
-// AddChart adds a simple bar chart (text-based representation)
 func (r *PDFReport) AddChart(title string, data map[string]int) {
 	r.pdf.SetFont("Arial", "B", 11)
 	r.pdf.SetTextColor(33, 37, 41)
 	r.pdf.CellFormat(0, 8, title, "", 1, "L", false, 0, "")
 
-	// Find max for scaling
 	max := 0
 	for _, v := range data {
 		if v > max {
@@ -146,12 +129,10 @@ func (r *PDFReport) AddChart(title string, data map[string]int) {
 		r.pdf.SetTextColor(108, 117, 125)
 		r.pdf.CellFormat(40, 6, label, "", 0, "L", false, 0, "")
 
-		// Bar
 		barWidth := float64(value) / float64(max) * barMaxWidth
 		r.pdf.SetFillColor(66, 133, 244) // Blue
 		r.pdf.CellFormat(barWidth, 6, "", "", 0, "L", true, 0, "")
 
-		// Value
 		r.pdf.SetTextColor(33, 37, 41)
 		r.pdf.CellFormat(30, 6, fmt.Sprintf(" %d", value), "", 1, "L", false, 0, "")
 	}
@@ -159,7 +140,6 @@ func (r *PDFReport) AddChart(title string, data map[string]int) {
 	r.pdf.Ln(5)
 }
 
-// AddSeverityIndicator adds a colored severity indicator
 func (r *PDFReport) AddSeverityIndicator(severity string) {
 	var red, green, blue int
 
@@ -183,12 +163,10 @@ func (r *PDFReport) AddSeverityIndicator(severity string) {
 	r.pdf.CellFormat(15, 6, severity, "", 0, "C", true, 0, "")
 }
 
-// AddPageBreak adds a page break
 func (r *PDFReport) AddPageBreak() {
 	r.pdf.AddPage()
 }
 
-// AddFooter adds page numbers (call before Output)
 func (r *PDFReport) AddFooter() {
 	r.pdf.SetFooterFunc(func() {
 		r.pdf.SetY(-15)
@@ -198,7 +176,6 @@ func (r *PDFReport) AddFooter() {
 	})
 }
 
-// Output returns the PDF as bytes
 func (r *PDFReport) Output() ([]byte, error) {
 	r.AddFooter()
 
@@ -211,28 +188,23 @@ func (r *PDFReport) Output() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// OutputToFile writes the PDF to a file
 func (r *PDFReport) OutputToFile(filename string) error {
 	r.AddFooter()
 	return r.pdf.OutputFileAndClose(filename)
 }
 
-// ComplianceReportPDF generates a detailed compliance PDF
 func ComplianceReportPDF(title string, frameworks map[string]*ComplianceStatus) ([]byte, error) {
 	pdf := NewPDFReport(title)
 
-	// Executive summary
 	pdf.AddSection("Compliance Overview")
 	pdf.AddParagraph("This report provides an overview of compliance status across multiple regulatory frameworks.")
 
-	// Summary table
 	for _, status := range frameworks {
 		compliancePct := float64(status.PassedChecks) / float64(status.TotalChecks) * 100
 		pdf.pdf.SetFont("Arial", "B", 11)
 		pdf.pdf.SetTextColor(33, 37, 41)
 		pdf.pdf.CellFormat(50, 8, status.Framework, "", 0, "L", false, 0, "")
 
-		// Compliance bar
 		barWidth := compliancePct * 0.8 // Scale to max 80mm
 		if compliancePct >= 80 {
 			pdf.pdf.SetFillColor(40, 167, 69) // Green
@@ -247,7 +219,6 @@ func ComplianceReportPDF(title string, frameworks map[string]*ComplianceStatus) 
 
 	pdf.pdf.Ln(10)
 
-	// Detailed findings per framework
 	for _, status := range frameworks {
 		if len(status.Findings) > 0 {
 			pdf.AddSection(fmt.Sprintf("%s - %d Issues", status.Framework, len(status.Findings)))
@@ -269,14 +240,11 @@ func ComplianceReportPDF(title string, frameworks map[string]*ComplianceStatus) 
 	return pdf.Output()
 }
 
-// ExecutiveSummaryPDF generates an executive summary PDF
 func ExecutiveSummaryPDF(title string, stats *Stats) ([]byte, error) {
 	pdf := NewPDFReport(title)
 
-	// Key metrics in boxes
 	pdf.AddSection("Security Posture Summary")
 
-	// Create metric boxes
 	metrics := []struct {
 		label string
 		value int
@@ -294,13 +262,11 @@ func ExecutiveSummaryPDF(title string, stats *Stats) ([]byte, error) {
 		pdf.pdf.SetFillColor(m.color[0], m.color[1], m.color[2])
 		pdf.pdf.Rect(x, pdf.pdf.GetY(), boxWidth, 25, "F")
 
-		// Value
 		pdf.pdf.SetXY(x, pdf.pdf.GetY()+3)
 		pdf.pdf.SetFont("Arial", "B", 18)
 		pdf.pdf.SetTextColor(255, 255, 255)
 		pdf.pdf.CellFormat(boxWidth, 10, fmt.Sprintf("%d", m.value), "", 0, "C", false, 0, "")
 
-		// Label
 		pdf.pdf.SetXY(x, pdf.pdf.GetY()+12)
 		pdf.pdf.SetFont("Arial", "", 9)
 		pdf.pdf.CellFormat(boxWidth, 8, m.label, "", 0, "C", false, 0, "")
@@ -308,7 +274,6 @@ func ExecutiveSummaryPDF(title string, stats *Stats) ([]byte, error) {
 
 	pdf.pdf.Ln(35)
 
-	// Findings breakdown
 	pdf.AddSection("Findings by Severity")
 	pdf.AddChart("", map[string]int{
 		"Critical": stats.CriticalFindings,
@@ -317,7 +282,6 @@ func ExecutiveSummaryPDF(title string, stats *Stats) ([]byte, error) {
 		"Low":      stats.LowFindings,
 	})
 
-	// Status breakdown
 	pdf.AddSection("Findings by Status")
 	pdf.AddSummaryTable(map[string]int{
 		"Open":     stats.OpenFindings,

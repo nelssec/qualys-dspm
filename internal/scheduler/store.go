@@ -11,12 +11,10 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-// PostgresStore implements Store with PostgreSQL
 type PostgresStore struct {
 	db *sqlx.DB
 }
 
-// NewPostgresStore creates a new PostgreSQL scheduler store
 func NewPostgresStore(db *sqlx.DB) *PostgresStore {
 	return &PostgresStore{db: db}
 }
@@ -58,7 +56,6 @@ func (r *jobRow) toJob() (*Job, error) {
 	}, nil
 }
 
-// GetJob retrieves a job by ID
 func (s *PostgresStore) GetJob(ctx context.Context, id string) (*Job, error) {
 	var row jobRow
 	err := s.db.GetContext(ctx, &row, `
@@ -74,7 +71,6 @@ func (s *PostgresStore) GetJob(ctx context.Context, id string) (*Job, error) {
 	return row.toJob()
 }
 
-// ListJobs lists all jobs
 func (s *PostgresStore) ListJobs(ctx context.Context) ([]*Job, error) {
 	var rows []jobRow
 	err := s.db.SelectContext(ctx, &rows, `
@@ -96,7 +92,6 @@ func (s *PostgresStore) ListJobs(ctx context.Context) ([]*Job, error) {
 	return jobs, nil
 }
 
-// CreateJob creates a new job
 func (s *PostgresStore) CreateJob(ctx context.Context, job *Job) error {
 	if job.ID == "" {
 		job.ID = uuid.New().String()
@@ -117,7 +112,6 @@ func (s *PostgresStore) CreateJob(ctx context.Context, job *Job) error {
 	return err
 }
 
-// UpdateJob updates a job
 func (s *PostgresStore) UpdateJob(ctx context.Context, job *Job) error {
 	job.UpdatedAt = time.Now()
 
@@ -135,13 +129,11 @@ func (s *PostgresStore) UpdateJob(ctx context.Context, job *Job) error {
 	return err
 }
 
-// DeleteJob deletes a job
 func (s *PostgresStore) DeleteJob(ctx context.Context, id string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM scheduled_jobs WHERE id = $1`, id)
 	return err
 }
 
-// UpdateLastRun updates the last run time
 func (s *PostgresStore) UpdateLastRun(ctx context.Context, id string, lastRun time.Time) error {
 	_, err := s.db.ExecContext(ctx, `
 		UPDATE scheduled_jobs SET last_run = $2, updated_at = NOW()
@@ -150,7 +142,6 @@ func (s *PostgresStore) UpdateLastRun(ctx context.Context, id string, lastRun ti
 	return err
 }
 
-// CreateExecution creates a job execution record
 func (s *PostgresStore) CreateExecution(ctx context.Context, exec *JobExecution) error {
 	if exec.ID == "" {
 		exec.ID = uuid.New().String()
@@ -163,7 +154,6 @@ func (s *PostgresStore) CreateExecution(ctx context.Context, exec *JobExecution)
 	return err
 }
 
-// UpdateExecution updates a job execution record
 func (s *PostgresStore) UpdateExecution(ctx context.Context, exec *JobExecution) error {
 	_, err := s.db.ExecContext(ctx, `
 		UPDATE job_executions SET status = $2, ended_at = $3, error = $4, output = $5
@@ -172,7 +162,6 @@ func (s *PostgresStore) UpdateExecution(ctx context.Context, exec *JobExecution)
 	return err
 }
 
-// GetJobExecutions gets recent executions for a job
 func (s *PostgresStore) GetJobExecutions(ctx context.Context, jobID string, limit int) ([]*JobExecution, error) {
 	var execs []*JobExecution
 	err := s.db.SelectContext(ctx, &execs, `

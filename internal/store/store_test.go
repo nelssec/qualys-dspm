@@ -292,13 +292,13 @@ func TestStore_Findings(t *testing.T) {
 
 	// Create finding
 	finding := &models.Finding{
-		AccountID:   account.ID,
-		FindingType: "PUBLIC_BUCKET",
-		Severity:    models.SeverityCritical,
-		Title:       "Test bucket is public",
-		Description: "The bucket allows public access",
-		Remediation: "Disable public access",
-		Status:      models.FindingStatusOpen,
+		AccountID:            account.ID,
+		FindingType:          "PUBLIC_BUCKET",
+		Severity:             models.SeverityCritical,
+		Title:                "Test bucket is public",
+		Description:          "The bucket allows public access",
+		Remediation:          "Disable public access",
+		Status:               models.FindingStatusOpen,
 		ComplianceFrameworks: []string{"GDPR-Art32", "PCI-DSS-1.3"},
 	}
 

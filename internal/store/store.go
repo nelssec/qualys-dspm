@@ -13,19 +13,16 @@ import (
 	"github.com/qualys/dspm/internal/models"
 )
 
-// Store provides database operations
 type Store struct {
 	db *sqlx.DB
 }
 
-// Config holds database configuration
 type Config struct {
 	DSN          string
 	MaxOpenConns int
 	MaxIdleConns int
 }
 
-// New creates a new store with the given database connection
 func New(cfg Config) (*Store, error) {
 	db, err := sqlx.Connect("postgres", cfg.DSN)
 	if err != nil {
@@ -39,19 +36,18 @@ func New(cfg Config) (*Store, error) {
 	return &Store{db: db}, nil
 }
 
-// Close closes the database connection
 func (s *Store) Close() error {
 	return s.db.Close()
 }
 
-// Ping tests the database connection
 func (s *Store) Ping(ctx context.Context) error {
 	return s.db.PingContext(ctx)
 }
 
-// --- Cloud Accounts ---
+func (s *Store) DB() *sqlx.DB {
+	return s.db
+}
 
-// CreateAccount creates a new cloud account
 func (s *Store) CreateAccount(ctx context.Context, account *models.CloudAccount) error {
 	query := `
 		INSERT INTO cloud_accounts (id, provider, external_id, display_name, connector_config, status, created_at, updated_at)
@@ -77,7 +73,6 @@ func (s *Store) CreateAccount(ctx context.Context, account *models.CloudAccount)
 	return err
 }
 
-// GetAccount retrieves an account by ID
 func (s *Store) GetAccount(ctx context.Context, id uuid.UUID) (*models.CloudAccount, error) {
 	var account models.CloudAccount
 	query := `SELECT * FROM cloud_accounts WHERE id = $1`
@@ -88,7 +83,6 @@ func (s *Store) GetAccount(ctx context.Context, id uuid.UUID) (*models.CloudAcco
 	return &account, err
 }
 
-// GetAccountByExternalID retrieves an account by provider and external ID
 func (s *Store) GetAccountByExternalID(ctx context.Context, provider models.Provider, externalID string) (*models.CloudAccount, error) {
 	var account models.CloudAccount
 	query := `SELECT * FROM cloud_accounts WHERE provider = $1 AND external_id = $2`
@@ -99,7 +93,6 @@ func (s *Store) GetAccountByExternalID(ctx context.Context, provider models.Prov
 	return &account, err
 }
 
-// ListAccounts retrieves all accounts with optional filtering
 func (s *Store) ListAccounts(ctx context.Context, provider *models.Provider, status *string) ([]models.CloudAccount, error) {
 	query := `SELECT * FROM cloud_accounts WHERE 1=1`
 	args := make([]interface{}, 0)
@@ -122,30 +115,24 @@ func (s *Store) ListAccounts(ctx context.Context, provider *models.Provider, sta
 	return accounts, err
 }
 
-// UpdateAccountStatus updates an account's status
 func (s *Store) UpdateAccountStatus(ctx context.Context, id uuid.UUID, status, message string) error {
 	query := `UPDATE cloud_accounts SET status = $1, status_message = $2, updated_at = $3 WHERE id = $4`
 	_, err := s.db.ExecContext(ctx, query, status, message, time.Now(), id)
 	return err
 }
 
-// UpdateAccountLastScan updates the last scan timestamp
 func (s *Store) UpdateAccountLastScan(ctx context.Context, id uuid.UUID, scanStatus string) error {
 	query := `UPDATE cloud_accounts SET last_scan_at = $1, last_scan_status = $2, updated_at = $1 WHERE id = $3`
 	_, err := s.db.ExecContext(ctx, query, time.Now(), scanStatus, id)
 	return err
 }
 
-// DeleteAccount deletes an account
 func (s *Store) DeleteAccount(ctx context.Context, id uuid.UUID) error {
 	query := `DELETE FROM cloud_accounts WHERE id = $1`
 	_, err := s.db.ExecContext(ctx, query, id)
 	return err
 }
 
-// --- Data Assets ---
-
-// UpsertAsset creates or updates a data asset
 func (s *Store) UpsertAsset(ctx context.Context, asset *models.DataAsset) error {
 	query := `
 		INSERT INTO data_assets (
@@ -194,7 +181,6 @@ func (s *Store) UpsertAsset(ctx context.Context, asset *models.DataAsset) error 
 	return err
 }
 
-// GetAsset retrieves an asset by ID
 func (s *Store) GetAsset(ctx context.Context, id uuid.UUID) (*models.DataAsset, error) {
 	var asset models.DataAsset
 	query := `SELECT * FROM data_assets WHERE id = $1`
@@ -205,7 +191,6 @@ func (s *Store) GetAsset(ctx context.Context, id uuid.UUID) (*models.DataAsset, 
 	return &asset, err
 }
 
-// GetAssetByARN retrieves an asset by ARN
 func (s *Store) GetAssetByARN(ctx context.Context, arn string) (*models.DataAsset, error) {
 	var asset models.DataAsset
 	query := `SELECT * FROM data_assets WHERE resource_arn = $1`
@@ -216,17 +201,15 @@ func (s *Store) GetAssetByARN(ctx context.Context, arn string) (*models.DataAsse
 	return &asset, err
 }
 
-// ListAssetFilters defines filters for listing assets
 type ListAssetFilters struct {
-	AccountID       *uuid.UUID
-	ResourceType    *models.ResourceType
+	AccountID        *uuid.UUID
+	ResourceType     *models.ResourceType
 	SensitivityLevel *models.Sensitivity
-	PublicOnly      bool
-	Limit           int
-	Offset          int
+	PublicOnly       bool
+	Limit            int
+	Offset           int
 }
 
-// ListAssets retrieves assets with filtering
 func (s *Store) ListAssets(ctx context.Context, filters ListAssetFilters) ([]models.DataAsset, int, error) {
 	baseQuery := `FROM data_assets WHERE 1=1`
 	args := make([]interface{}, 0)
@@ -251,14 +234,12 @@ func (s *Store) ListAssets(ctx context.Context, filters ListAssetFilters) ([]mod
 		baseQuery += " AND public_access = true"
 	}
 
-	// Count total
 	var total int
 	countQuery := "SELECT COUNT(*) " + baseQuery
 	if err := s.db.GetContext(ctx, &total, countQuery, args...); err != nil {
 		return nil, 0, err
 	}
 
-	// Get assets
 	selectQuery := "SELECT * " + baseQuery + " ORDER BY sensitivity_level DESC, updated_at DESC"
 	if filters.Limit > 0 {
 		selectQuery += fmt.Sprintf(" LIMIT %d", filters.Limit)
@@ -275,7 +256,6 @@ func (s *Store) ListAssets(ctx context.Context, filters ListAssetFilters) ([]mod
 	return assets, total, nil
 }
 
-// UpdateAssetClassification updates the classification summary for an asset
 func (s *Store) UpdateAssetClassification(ctx context.Context, assetID uuid.UUID, sensitivity models.Sensitivity, categories []string, count int) error {
 	query := `
 		UPDATE data_assets
@@ -286,9 +266,6 @@ func (s *Store) UpdateAssetClassification(ctx context.Context, assetID uuid.UUID
 	return err
 }
 
-// --- Classifications ---
-
-// CreateClassification creates a new classification record
 func (s *Store) CreateClassification(ctx context.Context, classification *models.Classification) error {
 	query := `
 		INSERT INTO classifications (
@@ -316,7 +293,6 @@ func (s *Store) CreateClassification(ctx context.Context, classification *models
 	return err
 }
 
-// ListClassificationsByAsset retrieves classifications for an asset
 func (s *Store) ListClassificationsByAsset(ctx context.Context, assetID uuid.UUID) ([]models.Classification, error) {
 	var classifications []models.Classification
 	query := `SELECT * FROM classifications WHERE asset_id = $1 ORDER BY sensitivity DESC, discovered_at DESC`
@@ -324,7 +300,6 @@ func (s *Store) ListClassificationsByAsset(ctx context.Context, assetID uuid.UUI
 	return classifications, err
 }
 
-// GetClassificationStats returns classification statistics
 func (s *Store) GetClassificationStats(ctx context.Context, accountID *uuid.UUID) (map[string]int, error) {
 	query := `
 		SELECT category, SUM(finding_count) as count
@@ -357,9 +332,6 @@ func (s *Store) GetClassificationStats(ctx context.Context, accountID *uuid.UUID
 	return stats, nil
 }
 
-// --- Findings ---
-
-// CreateFinding creates a new finding
 func (s *Store) CreateFinding(ctx context.Context, finding *models.Finding) error {
 	query := `
 		INSERT INTO findings (
@@ -387,7 +359,6 @@ func (s *Store) CreateFinding(ctx context.Context, finding *models.Finding) erro
 	return err
 }
 
-// GetFinding retrieves a finding by ID
 func (s *Store) GetFinding(ctx context.Context, id uuid.UUID) (*models.Finding, error) {
 	var finding models.Finding
 	query := `SELECT * FROM findings WHERE id = $1`
@@ -398,7 +369,6 @@ func (s *Store) GetFinding(ctx context.Context, id uuid.UUID) (*models.Finding, 
 	return &finding, err
 }
 
-// ListFindingFilters defines filters for listing findings
 type ListFindingFilters struct {
 	AccountID   *uuid.UUID
 	AssetID     *uuid.UUID
@@ -409,7 +379,6 @@ type ListFindingFilters struct {
 	Offset      int
 }
 
-// ListFindings retrieves findings with filtering
 func (s *Store) ListFindings(ctx context.Context, filters ListFindingFilters) ([]models.Finding, int, error) {
 	baseQuery := `FROM findings WHERE 1=1`
 	args := make([]interface{}, 0)
@@ -440,14 +409,12 @@ func (s *Store) ListFindings(ctx context.Context, filters ListFindingFilters) ([
 		args = append(args, *filters.FindingType)
 	}
 
-	// Count total
 	var total int
 	countQuery := "SELECT COUNT(*) " + baseQuery
 	if err := s.db.GetContext(ctx, &total, countQuery, args...); err != nil {
 		return nil, 0, err
 	}
 
-	// Get findings
 	selectQuery := "SELECT * " + baseQuery + " ORDER BY severity DESC, created_at DESC"
 	if filters.Limit > 0 {
 		selectQuery += fmt.Sprintf(" LIMIT %d", filters.Limit)
@@ -464,7 +431,6 @@ func (s *Store) ListFindings(ctx context.Context, filters ListFindingFilters) ([
 	return findings, total, nil
 }
 
-// UpdateFindingStatus updates a finding's status
 func (s *Store) UpdateFindingStatus(ctx context.Context, id uuid.UUID, status models.FindingStatus, reason string) error {
 	query := `UPDATE findings SET status = $1, status_reason = $2, updated_at = $3`
 	args := []interface{}{status, reason, time.Now()}
@@ -482,7 +448,6 @@ func (s *Store) UpdateFindingStatus(ctx context.Context, id uuid.UUID, status mo
 	return err
 }
 
-// GetFindingStats returns finding statistics
 func (s *Store) GetFindingStats(ctx context.Context, accountID *uuid.UUID) (map[string]map[string]int, error) {
 	query := `
 		SELECT severity, status, COUNT(*) as count
@@ -517,9 +482,6 @@ func (s *Store) GetFindingStats(ctx context.Context, accountID *uuid.UUID) (map[
 	return stats, nil
 }
 
-// --- Scan Jobs ---
-
-// CreateScanJob creates a new scan job
 func (s *Store) CreateScanJob(ctx context.Context, job *models.ScanJob) error {
 	query := `
 		INSERT INTO scan_jobs (
@@ -538,7 +500,6 @@ func (s *Store) CreateScanJob(ctx context.Context, job *models.ScanJob) error {
 	return err
 }
 
-// GetScanJob retrieves a scan job by ID
 func (s *Store) GetScanJob(ctx context.Context, id uuid.UUID) (*models.ScanJob, error) {
 	var job models.ScanJob
 	query := `SELECT * FROM scan_jobs WHERE id = $1`
@@ -549,7 +510,6 @@ func (s *Store) GetScanJob(ctx context.Context, id uuid.UUID) (*models.ScanJob, 
 	return &job, err
 }
 
-// UpdateScanJobStatus updates a scan job's status
 func (s *Store) UpdateScanJobStatus(ctx context.Context, id uuid.UUID, status models.ScanStatus, workerID string) error {
 	query := `UPDATE scan_jobs SET status = $1, worker_id = $2`
 	args := []interface{}{status, workerID}
@@ -570,7 +530,6 @@ func (s *Store) UpdateScanJobStatus(ctx context.Context, id uuid.UUID, status mo
 	return err
 }
 
-// UpdateScanJobProgress updates scan job progress
 func (s *Store) UpdateScanJobProgress(ctx context.Context, id uuid.UUID, scanned, findings, classifications int) error {
 	query := `
 		UPDATE scan_jobs
@@ -581,7 +540,6 @@ func (s *Store) UpdateScanJobProgress(ctx context.Context, id uuid.UUID, scanned
 	return err
 }
 
-// ListPendingScanJobs retrieves pending scan jobs
 func (s *Store) ListPendingScanJobs(ctx context.Context, limit int) ([]models.ScanJob, error) {
 	var jobs []models.ScanJob
 	query := `
@@ -592,4 +550,38 @@ func (s *Store) ListPendingScanJobs(ctx context.Context, limit int) ([]models.Sc
 	`
 	err := s.db.SelectContext(ctx, &jobs, query, models.ScanStatusPending, limit)
 	return jobs, err
+}
+
+type DashboardCounts struct {
+	TotalAccounts    int `db:"total_accounts"`
+	ActiveAccounts   int `db:"active_accounts"`
+	TotalAssets      int `db:"total_assets"`
+	PublicAssets     int `db:"public_assets"`
+	CriticalAssets   int `db:"critical_assets"`
+	TotalFindings    int `db:"total_findings"`
+	OpenFindings     int `db:"open_findings"`
+	CriticalFindings int `db:"critical_findings"`
+}
+
+func (s *Store) GetDashboardCounts(ctx context.Context) (*DashboardCounts, error) {
+	counts := &DashboardCounts{}
+
+	query := `
+		SELECT
+			(SELECT COUNT(*) FROM cloud_accounts) AS total_accounts,
+			(SELECT COUNT(*) FROM cloud_accounts WHERE status = 'active') AS active_accounts,
+			(SELECT COUNT(*) FROM data_assets) AS total_assets,
+			(SELECT COUNT(*) FROM data_assets WHERE public_access = true) AS public_assets,
+			(SELECT COUNT(*) FROM data_assets WHERE sensitivity_level = 'CRITICAL') AS critical_assets,
+			(SELECT COUNT(*) FROM findings) AS total_findings,
+			(SELECT COUNT(*) FROM findings WHERE status = 'open') AS open_findings,
+			(SELECT COUNT(*) FROM findings WHERE severity = 'CRITICAL') AS critical_findings
+	`
+
+	err := s.db.GetContext(ctx, counts, query)
+	if err != nil {
+		return nil, fmt.Errorf("getting dashboard counts: %w", err)
+	}
+
+	return counts, nil
 }

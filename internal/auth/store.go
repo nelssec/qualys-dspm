@@ -10,17 +10,14 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-// PostgresUserStore implements UserStore with PostgreSQL
 type PostgresUserStore struct {
 	db *sqlx.DB
 }
 
-// NewPostgresUserStore creates a new PostgreSQL user store
 func NewPostgresUserStore(db *sqlx.DB) *PostgresUserStore {
 	return &PostgresUserStore{db: db}
 }
 
-// GetUserByID retrieves a user by ID
 func (s *PostgresUserStore) GetUserByID(ctx context.Context, id string) (*User, error) {
 	var user User
 	err := s.db.GetContext(ctx, &user, `
@@ -36,7 +33,6 @@ func (s *PostgresUserStore) GetUserByID(ctx context.Context, id string) (*User, 
 	return &user, nil
 }
 
-// GetUserByEmail retrieves a user by email
 func (s *PostgresUserStore) GetUserByEmail(ctx context.Context, email string) (*User, error) {
 	var user User
 	err := s.db.GetContext(ctx, &user, `
@@ -52,7 +48,6 @@ func (s *PostgresUserStore) GetUserByEmail(ctx context.Context, email string) (*
 	return &user, nil
 }
 
-// CreateUser creates a new user
 func (s *PostgresUserStore) CreateUser(ctx context.Context, user *User) error {
 	if user.ID == "" {
 		user.ID = uuid.New().String()
@@ -68,7 +63,6 @@ func (s *PostgresUserStore) CreateUser(ctx context.Context, user *User) error {
 	return err
 }
 
-// UpdateUser updates a user
 func (s *PostgresUserStore) UpdateUser(ctx context.Context, user *User) error {
 	user.UpdatedAt = time.Now()
 	_, err := s.db.ExecContext(ctx, `
@@ -78,13 +72,11 @@ func (s *PostgresUserStore) UpdateUser(ctx context.Context, user *User) error {
 	return err
 }
 
-// DeleteUser deletes a user
 func (s *PostgresUserStore) DeleteUser(ctx context.Context, id string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM users WHERE id = $1`, id)
 	return err
 }
 
-// ListUsers lists all users
 func (s *PostgresUserStore) ListUsers(ctx context.Context) ([]*User, error) {
 	var users []*User
 	err := s.db.SelectContext(ctx, &users, `
@@ -94,7 +86,6 @@ func (s *PostgresUserStore) ListUsers(ctx context.Context) ([]*User, error) {
 	return users, err
 }
 
-// StoreRefreshToken stores a refresh token
 func (s *PostgresUserStore) StoreRefreshToken(ctx context.Context, userID, token string, expiresAt time.Time) error {
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO refresh_tokens (id, user_id, token, expires_at, created_at)
@@ -103,7 +94,6 @@ func (s *PostgresUserStore) StoreRefreshToken(ctx context.Context, userID, token
 	return err
 }
 
-// ValidateRefreshToken validates a refresh token
 func (s *PostgresUserStore) ValidateRefreshToken(ctx context.Context, userID, token string) (bool, error) {
 	var count int
 	err := s.db.GetContext(ctx, &count, `
@@ -113,7 +103,6 @@ func (s *PostgresUserStore) ValidateRefreshToken(ctx context.Context, userID, to
 	return count > 0, err
 }
 
-// RevokeRefreshToken revokes a refresh token
 func (s *PostgresUserStore) RevokeRefreshToken(ctx context.Context, userID, token string) error {
 	_, err := s.db.ExecContext(ctx, `
 		UPDATE refresh_tokens SET revoked_at = NOW()
@@ -122,7 +111,6 @@ func (s *PostgresUserStore) RevokeRefreshToken(ctx context.Context, userID, toke
 	return err
 }
 
-// RevokeAllRefreshTokens revokes all refresh tokens for a user
 func (s *PostgresUserStore) RevokeAllRefreshTokens(ctx context.Context, userID string) error {
 	_, err := s.db.ExecContext(ctx, `
 		UPDATE refresh_tokens SET revoked_at = NOW()

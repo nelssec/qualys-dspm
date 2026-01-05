@@ -15,7 +15,6 @@ import (
 	"github.com/qualys/dspm/internal/models"
 )
 
-// NotificationType defines the type of notification
 type NotificationType string
 
 const (
@@ -27,7 +26,6 @@ const (
 	NotifyWeeklyReport    NotificationType = "weekly_report"
 )
 
-// Channel defines notification channels
 type Channel string
 
 const (
@@ -35,7 +33,6 @@ const (
 	ChannelEmail Channel = "email"
 )
 
-// Notification represents a notification to be sent
 type Notification struct {
 	Type      NotificationType
 	Title     string
@@ -45,42 +42,37 @@ type Notification struct {
 	Timestamp time.Time
 }
 
-// Config holds notification configuration
 type Config struct {
 	Slack SlackConfig
 	Email EmailConfig
 }
 
-// SlackConfig holds Slack configuration
 type SlackConfig struct {
-	WebhookURL     string
-	Channel        string
-	Username       string
-	IconEmoji      string
-	Enabled        bool
-	MinSeverity    models.Sensitivity // Minimum severity to notify
+	WebhookURL  string
+	Channel     string
+	Username    string
+	IconEmoji   string
+	Enabled     bool
+	MinSeverity models.Sensitivity // Minimum severity to notify
 }
 
-// EmailConfig holds email configuration
 type EmailConfig struct {
-	SMTPHost     string
-	SMTPPort     int
-	Username     string
-	Password     string
-	From         string
-	To           []string
-	Enabled      bool
-	MinSeverity  models.Sensitivity
+	SMTPHost    string
+	SMTPPort    int
+	Username    string
+	Password    string
+	From        string
+	To          []string
+	Enabled     bool
+	MinSeverity models.Sensitivity
 }
 
-// Service handles notifications
 type Service struct {
-	config  Config
-	logger  *slog.Logger
-	client  *http.Client
+	config Config
+	logger *slog.Logger
+	client *http.Client
 }
 
-// NewService creates a new notification service
 func NewService(config Config, logger *slog.Logger) *Service {
 	if logger == nil {
 		logger = slog.Default()
@@ -93,7 +85,6 @@ func NewService(config Config, logger *slog.Logger) *Service {
 	}
 }
 
-// Send sends a notification to all enabled channels
 func (s *Service) Send(ctx context.Context, notif *Notification) error {
 	var errs []error
 
@@ -116,7 +107,6 @@ func (s *Service) Send(ctx context.Context, notif *Notification) error {
 	return nil
 }
 
-// shouldNotify checks if notification should be sent based on severity
 func (s *Service) shouldNotify(actual, minimum models.Sensitivity) bool {
 	severityOrder := map[models.Sensitivity]int{
 		models.SensitivityLow:      1,
@@ -128,7 +118,6 @@ func (s *Service) shouldNotify(actual, minimum models.Sensitivity) bool {
 	return severityOrder[actual] >= severityOrder[minimum]
 }
 
-// SlackMessage represents a Slack message payload
 type SlackMessage struct {
 	Channel     string            `json:"channel,omitempty"`
 	Username    string            `json:"username,omitempty"`
@@ -137,26 +126,23 @@ type SlackMessage struct {
 	Attachments []SlackAttachment `json:"attachments,omitempty"`
 }
 
-// SlackAttachment represents a Slack attachment
 type SlackAttachment struct {
-	Color      string       `json:"color,omitempty"`
-	Title      string       `json:"title,omitempty"`
-	TitleLink  string       `json:"title_link,omitempty"`
-	Text       string       `json:"text,omitempty"`
-	Fallback   string       `json:"fallback,omitempty"`
-	Fields     []SlackField `json:"fields,omitempty"`
-	Footer     string       `json:"footer,omitempty"`
-	Timestamp  int64        `json:"ts,omitempty"`
+	Color     string       `json:"color,omitempty"`
+	Title     string       `json:"title,omitempty"`
+	TitleLink string       `json:"title_link,omitempty"`
+	Text      string       `json:"text,omitempty"`
+	Fallback  string       `json:"fallback,omitempty"`
+	Fields    []SlackField `json:"fields,omitempty"`
+	Footer    string       `json:"footer,omitempty"`
+	Timestamp int64        `json:"ts,omitempty"`
 }
 
-// SlackField represents a field in a Slack attachment
 type SlackField struct {
 	Title string `json:"title"`
 	Value string `json:"value"`
 	Short bool   `json:"short"`
 }
 
-// sendSlack sends a notification to Slack
 func (s *Service) sendSlack(ctx context.Context, notif *Notification) error {
 	color := s.severityToColor(notif.Severity)
 
@@ -237,7 +223,6 @@ func (s *Service) sendSlack(ctx context.Context, notif *Notification) error {
 	return nil
 }
 
-// severityToColor converts severity to Slack color
 func (s *Service) severityToColor(severity models.Sensitivity) string {
 	switch severity {
 	case models.SensitivityCritical:
@@ -251,7 +236,6 @@ func (s *Service) severityToColor(severity models.Sensitivity) string {
 	}
 }
 
-// sendEmail sends a notification via email
 func (s *Service) sendEmail(ctx context.Context, notif *Notification) error {
 	subject := fmt.Sprintf("[DSPM Alert] %s", notif.Title)
 	body, err := s.formatEmailBody(notif)
@@ -277,7 +261,6 @@ func (s *Service) sendEmail(ctx context.Context, notif *Notification) error {
 	return nil
 }
 
-// buildEmailMessage builds an email message
 func (s *Service) buildEmailMessage(subject, body string) string {
 	var msg strings.Builder
 	msg.WriteString(fmt.Sprintf("From: %s\r\n", s.config.Email.From))
@@ -290,7 +273,6 @@ func (s *Service) buildEmailMessage(subject, body string) string {
 	return msg.String()
 }
 
-// formatEmailBody formats the email body
 func (s *Service) formatEmailBody(notif *Notification) (string, error) {
 	tmpl := `
 <!DOCTYPE html>
@@ -371,20 +353,21 @@ func (s *Service) formatEmailBody(notif *Notification) (string, error) {
 	return buf.String(), nil
 }
 
-// NotifyNewFinding sends a notification for a new finding
 func (s *Service) NotifyNewFinding(ctx context.Context, finding *models.Finding, asset *models.DataAsset) error {
+	severity := mapSeverityToSensitivity(finding.Severity)
+
 	notif := &Notification{
 		Type:     NotifyNewFinding,
 		Title:    fmt.Sprintf("New %s Finding Detected", finding.Severity),
 		Message:  finding.Title,
-		Severity: finding.Severity,
+		Severity: severity,
 		Data: map[string]interface{}{
-			"finding_id":  finding.ID,
-			"asset_id":    asset.ID,
-			"asset_name":  asset.Name,
-			"asset_type":  string(asset.AssetType),
-			"category":    string(finding.Category),
-			"severity":    string(finding.Severity),
+			"finding_id":   finding.ID.String(),
+			"asset_id":     asset.ID.String(),
+			"asset_name":   asset.Name,
+			"asset_type":   string(asset.ResourceType),
+			"finding_type": finding.FindingType,
+			"severity":     string(finding.Severity),
 		},
 		Timestamp: time.Now(),
 	}
@@ -392,7 +375,19 @@ func (s *Service) NotifyNewFinding(ctx context.Context, finding *models.Finding,
 	return s.Send(ctx, notif)
 }
 
-// NotifyCriticalFinding sends an immediate notification for critical findings
+func mapSeverityToSensitivity(sev models.FindingSeverity) models.Sensitivity {
+	switch sev {
+	case models.SeverityCritical:
+		return models.SensitivityCritical
+	case models.SeverityHigh:
+		return models.SensitivityHigh
+	case models.SeverityMedium:
+		return models.SensitivityMedium
+	default:
+		return models.SensitivityLow
+	}
+}
+
 func (s *Service) NotifyCriticalFinding(ctx context.Context, finding *models.Finding, asset *models.DataAsset) error {
 	notif := &Notification{
 		Type:     NotifyCriticalFinding,
@@ -400,11 +395,11 @@ func (s *Service) NotifyCriticalFinding(ctx context.Context, finding *models.Fin
 		Message:  fmt.Sprintf("Critical finding detected: %s on %s", finding.Title, asset.Name),
 		Severity: models.SensitivityCritical,
 		Data: map[string]interface{}{
-			"finding_id":   finding.ID,
-			"asset_id":     asset.ID,
-			"asset_name":   asset.Name,
-			"description":  finding.Description,
-			"remediation":  finding.Remediation,
+			"finding_id":  finding.ID.String(),
+			"asset_id":    asset.ID.String(),
+			"asset_name":  asset.Name,
+			"description": finding.Description,
+			"remediation": finding.Remediation,
 		},
 		Timestamp: time.Now(),
 	}
@@ -412,7 +407,6 @@ func (s *Service) NotifyCriticalFinding(ctx context.Context, finding *models.Fin
 	return s.Send(ctx, notif)
 }
 
-// NotifyScanComplete sends a notification when a scan completes
 func (s *Service) NotifyScanComplete(ctx context.Context, accountID string, stats ScanStats) error {
 	notif := &Notification{
 		Type:     NotifyScanComplete,
@@ -420,12 +414,12 @@ func (s *Service) NotifyScanComplete(ctx context.Context, accountID string, stat
 		Message:  fmt.Sprintf("Scan completed for account %s", accountID),
 		Severity: s.statsToSeverity(stats),
 		Data: map[string]interface{}{
-			"account_id":       accountID,
-			"assets_scanned":   stats.AssetsScanned,
-			"findings_total":   stats.TotalFindings,
+			"account_id":        accountID,
+			"assets_scanned":    stats.AssetsScanned,
+			"findings_total":    stats.TotalFindings,
 			"findings_critical": stats.CriticalFindings,
-			"findings_high":    stats.HighFindings,
-			"duration":         stats.Duration.String(),
+			"findings_high":     stats.HighFindings,
+			"duration":          stats.Duration.String(),
 		},
 		Timestamp: time.Now(),
 	}
@@ -433,7 +427,6 @@ func (s *Service) NotifyScanComplete(ctx context.Context, accountID string, stat
 	return s.Send(ctx, notif)
 }
 
-// ScanStats holds scan statistics
 type ScanStats struct {
 	AssetsScanned    int
 	TotalFindings    int
@@ -444,7 +437,6 @@ type ScanStats struct {
 	Duration         time.Duration
 }
 
-// statsToSeverity determines notification severity from scan stats
 func (s *Service) statsToSeverity(stats ScanStats) models.Sensitivity {
 	if stats.CriticalFindings > 0 {
 		return models.SensitivityCritical
@@ -458,7 +450,6 @@ func (s *Service) statsToSeverity(stats ScanStats) models.Sensitivity {
 	return models.SensitivityLow
 }
 
-// NotifyScanFailed sends a notification when a scan fails
 func (s *Service) NotifyScanFailed(ctx context.Context, accountID string, err error) error {
 	notif := &Notification{
 		Type:     NotifyScanFailed,
@@ -475,7 +466,6 @@ func (s *Service) NotifyScanFailed(ctx context.Context, accountID string, err er
 	return s.Send(ctx, notif)
 }
 
-// DigestStats holds daily/weekly digest statistics
 type DigestStats struct {
 	Period           string
 	NewFindings      int
@@ -487,7 +477,6 @@ type DigestStats struct {
 	TopCategories    map[string]int
 }
 
-// NotifyDailyDigest sends a daily digest notification
 func (s *Service) NotifyDailyDigest(ctx context.Context, stats DigestStats) error {
 	notif := &Notification{
 		Type:     NotifyDailyDigest,
@@ -509,7 +498,6 @@ func (s *Service) NotifyDailyDigest(ctx context.Context, stats DigestStats) erro
 	return s.Send(ctx, notif)
 }
 
-// digestToSeverity determines notification severity from digest stats
 func (s *Service) digestToSeverity(stats DigestStats) models.Sensitivity {
 	if stats.CriticalFindings > 0 {
 		return models.SensitivityCritical

@@ -8,7 +8,6 @@ import (
 	"github.com/qualys/dspm/internal/models"
 )
 
-// Rule defines a classification rule
 type Rule struct {
 	Name            string
 	Category        models.Category
@@ -19,53 +18,45 @@ type Rule struct {
 	Validators      []Validator      // Additional validation functions
 }
 
-// Validator is a function that validates a match
 type Validator func(match string) bool
 
-// Match represents a classification match
 type Match struct {
-	RuleName       string
-	Category       models.Category
-	Sensitivity    models.Sensitivity
-	Value          string // Redacted value
-	Count          int
-	LineNumbers    []int
-	Confidence     float64
+	RuleName    string
+	Category    models.Category
+	Sensitivity models.Sensitivity
+	Value       string // Redacted value
+	Count       int
+	LineNumbers []int
+	Confidence  float64
 }
 
-// Result represents classification results for content
 type Result struct {
-	Matches       []Match
-	TotalFindings int
-	Categories    []models.Category
+	Matches        []Match
+	TotalFindings  int
+	Categories     []models.Category
 	MaxSensitivity models.Sensitivity
 }
 
-// Classifier performs data classification
 type Classifier struct {
 	rules []*Rule
 }
 
-// New creates a new classifier with default rules
 func New() *Classifier {
 	return &Classifier{
 		rules: DefaultRules(),
 	}
 }
 
-// NewWithRules creates a classifier with custom rules
 func NewWithRules(rules []*Rule) *Classifier {
 	return &Classifier{
 		rules: rules,
 	}
 }
 
-// AddRule adds a rule to the classifier
 func (c *Classifier) AddRule(rule *Rule) {
 	c.rules = append(c.rules, rule)
 }
 
-// Classify analyzes content and returns classification results
 func (c *Classifier) Classify(content string) *Result {
 	result := &Result{
 		MaxSensitivity: models.SensitivityUnknown,
@@ -77,7 +68,6 @@ func (c *Classifier) Classify(content string) *Result {
 	for _, rule := range c.rules {
 		matches := c.findMatches(content, lines, rule)
 		if len(matches) > 0 {
-			// Aggregate matches for this rule
 			match := Match{
 				RuleName:    rule.Name,
 				Category:    rule.Category,
@@ -86,7 +76,6 @@ func (c *Classifier) Classify(content string) *Result {
 				Confidence:  1.0, // Default confidence
 			}
 
-			// Store first few redacted matches
 			for i, m := range matches {
 				if i == 0 {
 					match.Value = redact(m.value)
@@ -101,14 +90,12 @@ func (c *Classifier) Classify(content string) *Result {
 			result.TotalFindings += match.Count
 			categorySet[rule.Category] = true
 
-			// Update max sensitivity
 			if compareSensitivity(rule.Sensitivity, result.MaxSensitivity) > 0 {
 				result.MaxSensitivity = rule.Sensitivity
 			}
 		}
 	}
 
-	// Convert category set to slice
 	for cat := range categorySet {
 		result.Categories = append(result.Categories, cat)
 	}
@@ -124,7 +111,6 @@ type rawMatch struct {
 func (c *Classifier) findMatches(content string, lines []string, rule *Rule) []rawMatch {
 	var matches []rawMatch
 
-	// Check if context is required
 	contextFound := !rule.ContextRequired
 	if rule.ContextRequired && len(rule.ContextPatterns) > 0 {
 		lowerContent := strings.ToLower(content)
@@ -140,12 +126,10 @@ func (c *Classifier) findMatches(content string, lines []string, rule *Rule) []r
 		return nil
 	}
 
-	// Find pattern matches
 	for lineNum, line := range lines {
 		for _, pattern := range rule.Patterns {
 			found := pattern.FindAllString(line, -1)
 			for _, match := range found {
-				// Run validators
 				valid := true
 				for _, validator := range rule.Validators {
 					if !validator(match) {
@@ -167,10 +151,8 @@ func (c *Classifier) findMatches(content string, lines []string, rule *Rule) []r
 	return matches
 }
 
-// DefaultRules returns the default classification rules
 func DefaultRules() []*Rule {
 	return []*Rule{
-		// PII Rules
 		{
 			Name:        "SSN",
 			Category:    models.CategoryPII,
@@ -231,7 +213,6 @@ func DefaultRules() []*Rule {
 			ContextRequired: true,
 		},
 
-		// PHI Rules
 		{
 			Name:        "MRN",
 			Category:    models.CategoryPHI,
@@ -265,20 +246,15 @@ func DefaultRules() []*Rule {
 			},
 		},
 
-		// PCI Rules
 		{
 			Name:        "CREDIT_CARD",
 			Category:    models.CategoryPCI,
 			Sensitivity: models.SensitivityCritical,
 			Patterns: []*regexp.Regexp{
-				// Visa
 				regexp.MustCompile(`\b4\d{3}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b`),
-				// Mastercard
 				regexp.MustCompile(`\b5[1-5]\d{2}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b`),
 				regexp.MustCompile(`\b2[2-7]\d{2}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b`),
-				// Amex
 				regexp.MustCompile(`\b3[47]\d{2}[-\s]?\d{6}[-\s]?\d{5}\b`),
-				// Discover
 				regexp.MustCompile(`\b6(?:011|5\d{2})[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b`),
 			},
 			Validators: []Validator{ValidateLuhn},
@@ -318,7 +294,6 @@ func DefaultRules() []*Rule {
 			Validators: []Validator{ValidateIBAN},
 		},
 
-		// Secrets Rules
 		{
 			Name:        "AWS_ACCESS_KEY",
 			Category:    models.CategorySecrets,
@@ -418,41 +393,32 @@ func DefaultRules() []*Rule {
 	}
 }
 
-// Validators
-
-// ValidateSSN validates SSN format and area number
 func ValidateSSN(ssn string) bool {
-	// Remove separators
 	clean := strings.ReplaceAll(strings.ReplaceAll(ssn, "-", ""), " ", "")
 	if len(clean) != 9 {
 		return false
 	}
 
-	// Check if all digits
 	for _, c := range clean {
 		if !unicode.IsDigit(c) {
 			return false
 		}
 	}
 
-	// Area number validation (first 3 digits)
 	area := 0
 	for i := 0; i < 3; i++ {
 		area = area*10 + int(clean[i]-'0')
 	}
 
-	// Invalid area numbers
 	if area == 0 || area == 666 || area >= 900 {
 		return false
 	}
 
-	// Group number (middle 2) can't be 00
 	group := int(clean[3]-'0')*10 + int(clean[4]-'0')
 	if group == 0 {
 		return false
 	}
 
-	// Serial number (last 4) can't be 0000
 	serial := 0
 	for i := 5; i < 9; i++ {
 		serial = serial*10 + int(clean[i]-'0')
@@ -464,9 +430,7 @@ func ValidateSSN(ssn string) bool {
 	return true
 }
 
-// ValidateLuhn validates credit card numbers using Luhn algorithm
 func ValidateLuhn(number string) bool {
-	// Remove non-digits
 	var clean strings.Builder
 	for _, c := range number {
 		if unicode.IsDigit(c) {
@@ -499,7 +463,6 @@ func ValidateLuhn(number string) bool {
 	return sum%10 == 0
 }
 
-// ValidateABARouting validates ABA routing numbers
 func ValidateABARouting(routing string) bool {
 	if len(routing) != 9 {
 		return false
@@ -511,29 +474,24 @@ func ValidateABARouting(routing string) bool {
 		}
 	}
 
-	// ABA checksum: 3(d1 + d4 + d7) + 7(d2 + d5 + d8) + (d3 + d6 + d9) mod 10 = 0
 	d := make([]int, 9)
 	for i, c := range routing {
 		d[i] = int(c - '0')
 	}
 
-	checksum := 3*(d[0]+d[3]+d[6]) + 7*(d[1]+d[4]+d[7]) + (d[2]+d[5]+d[8])
+	checksum := 3*(d[0]+d[3]+d[6]) + 7*(d[1]+d[4]+d[7]) + (d[2] + d[5] + d[8])
 	return checksum%10 == 0
 }
 
-// ValidateIBAN validates IBAN checksums
 func ValidateIBAN(iban string) bool {
-	// Remove spaces
 	clean := strings.ReplaceAll(strings.ToUpper(iban), " ", "")
 
 	if len(clean) < 15 || len(clean) > 34 {
 		return false
 	}
 
-	// Move first 4 chars to end
 	rearranged := clean[4:] + clean[:4]
 
-	// Convert letters to numbers (A=10, B=11, etc.)
 	var numeric strings.Builder
 	for _, c := range rearranged {
 		if c >= 'A' && c <= 'Z' {
@@ -543,7 +501,6 @@ func ValidateIBAN(iban string) bool {
 		}
 	}
 
-	// Modulo 97 using string arithmetic (number too large for int64)
 	remainder := 0
 	for _, c := range numeric.String() {
 		remainder = (remainder*10 + int(c-'0')) % 97
@@ -551,8 +508,6 @@ func ValidateIBAN(iban string) bool {
 
 	return remainder == 1
 }
-
-// Helper functions
 
 func redact(value string) string {
 	if len(value) <= 4 {

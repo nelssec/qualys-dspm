@@ -11,7 +11,6 @@ import (
 	"github.com/qualys/dspm/internal/models"
 )
 
-// ReportType defines the type of report
 type ReportType string
 
 const (
@@ -22,7 +21,6 @@ const (
 	ReportTypeClassification ReportType = "classification"
 )
 
-// ReportFormat defines the output format
 type ReportFormat string
 
 const (
@@ -31,7 +29,6 @@ const (
 	FormatJSON ReportFormat = "json"
 )
 
-// ReportRequest contains report generation parameters
 type ReportRequest struct {
 	Type       ReportType
 	Format     ReportFormat
@@ -39,12 +36,11 @@ type ReportRequest struct {
 	AccountIDs []string
 	DateFrom   *time.Time
 	DateTo     *time.Time
-	Severities []models.Sensitivity
-	Categories []models.Category
-	Statuses   []models.FindingStatus
+	Severities []string
+	Categories []string
+	Statuses   []string
 }
 
-// Report represents a generated report
 type Report struct {
 	ID          string
 	Type        ReportType
@@ -57,33 +53,60 @@ type Report struct {
 	MimeType    string
 }
 
-// DataProvider interface for fetching report data
+type ReportFinding struct {
+	ID          string
+	Title       string
+	Description string
+	Severity    string
+	Category    string
+	Status      string
+	AssetID     string
+	Remediation string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+type ReportAsset struct {
+	ID            string
+	Name          string
+	AssetType     string
+	Provider      string
+	AccountID     string
+	Region        string
+	Sensitivity   string
+	LastScannedAt *time.Time
+	CreatedAt     time.Time
+}
+
+type ReportAccount struct {
+	ID       string
+	Name     string
+	Provider string
+	Status   string
+}
+
 type DataProvider interface {
-	GetFindings(ctx context.Context, filters FindingsFilter) ([]*models.Finding, error)
-	GetAssets(ctx context.Context, filters AssetsFilter) ([]*models.DataAsset, error)
-	GetClassifications(ctx context.Context, assetID string) ([]*models.Classification, error)
-	GetAccounts(ctx context.Context) ([]*models.CloudAccount, error)
+	GetFindings(ctx context.Context, filters FindingsFilter) ([]*ReportFinding, error)
+	GetAssets(ctx context.Context, filters AssetsFilter) ([]*ReportAsset, error)
+	GetAccounts(ctx context.Context) ([]*ReportAccount, error)
 	GetStats(ctx context.Context) (*Stats, error)
 }
 
-// FindingsFilter contains filter parameters for findings
 type FindingsFilter struct {
 	AccountIDs []string
-	Severities []models.Sensitivity
-	Categories []models.Category
-	Statuses   []models.FindingStatus
+	Severities []string
+	Categories []string
+	Statuses   []string
 	DateFrom   *time.Time
 	DateTo     *time.Time
 }
 
-// AssetsFilter contains filter parameters for assets
 type AssetsFilter struct {
-	AccountIDs   []string
-	AssetTypes   []models.AssetType
-	Sensitivities []models.Sensitivity
+	AccountIDs    []string
+	AssetTypes    []string
+	Sensitivities []string
 }
 
-// Stats holds summary statistics
 type Stats struct {
 	TotalAccounts        int
 	TotalAssets          int
@@ -94,21 +117,18 @@ type Stats struct {
 	LowFindings          int
 	OpenFindings         int
 	ResolvedFindings     int
-	ClassificationCounts map[models.Category]int
-	SensitivityCounts    map[models.Sensitivity]int
+	ClassificationCounts map[string]int
+	SensitivityCounts    map[string]int
 }
 
-// Generator handles report generation
 type Generator struct {
 	provider DataProvider
 }
 
-// NewGenerator creates a new report generator
 func NewGenerator(provider DataProvider) *Generator {
 	return &Generator{provider: provider}
 }
 
-// Generate generates a report
 func (g *Generator) Generate(ctx context.Context, req *ReportRequest) (*Report, error) {
 	switch req.Type {
 	case ReportTypeFindings:
@@ -126,7 +146,6 @@ func (g *Generator) Generate(ctx context.Context, req *ReportRequest) (*Report, 
 	}
 }
 
-// generateFindingsReport generates a findings report
 func (g *Generator) generateFindingsReport(ctx context.Context, req *ReportRequest) (*Report, error) {
 	findings, err := g.provider.GetFindings(ctx, FindingsFilter{
 		AccountIDs: req.AccountIDs,
@@ -172,12 +191,10 @@ func (g *Generator) generateFindingsReport(ctx context.Context, req *ReportReque
 	}, nil
 }
 
-// findingsToCSV converts findings to CSV
-func (g *Generator) findingsToCSV(findings []*models.Finding) ([]byte, error) {
+func (g *Generator) findingsToCSV(findings []*ReportFinding) ([]byte, error) {
 	var buf bytes.Buffer
 	w := csv.NewWriter(&buf)
 
-	// Header
 	header := []string{
 		"ID", "Title", "Description", "Severity", "Category", "Status",
 		"Asset ID", "Remediation", "Created At", "Updated At",
@@ -186,15 +203,14 @@ func (g *Generator) findingsToCSV(findings []*models.Finding) ([]byte, error) {
 		return nil, err
 	}
 
-	// Data rows
 	for _, f := range findings {
 		row := []string{
 			f.ID,
 			f.Title,
 			f.Description,
-			string(f.Severity),
-			string(f.Category),
-			string(f.Status),
+			f.Severity,
+			f.Category,
+			f.Status,
 			f.AssetID,
 			f.Remediation,
 			f.CreatedAt.Format(time.RFC3339),
@@ -209,31 +225,32 @@ func (g *Generator) findingsToCSV(findings []*models.Finding) ([]byte, error) {
 	return buf.Bytes(), w.Error()
 }
 
-// findingsToPDF generates a PDF report for findings
-func (g *Generator) findingsToPDF(findings []*models.Finding, title string) ([]byte, error) {
+func (g *Generator) findingsToPDF(findings []*ReportFinding, title string) ([]byte, error) {
 	pdf := NewPDFReport(title)
 
-	// Summary section
 	pdf.AddSection("Summary")
 	summary := map[string]int{
 		"Critical": 0, "High": 0, "Medium": 0, "Low": 0,
 	}
 	for _, f := range findings {
-		summary[string(f.Severity)]++
+		summary[f.Severity]++
 	}
 	pdf.AddSummaryTable(summary)
 
-	// Findings table
 	pdf.AddSection("Findings Detail")
 	headers := []string{"ID", "Title", "Severity", "Category", "Status"}
 	rows := make([][]string, len(findings))
 	for i, f := range findings {
+		idShort := f.ID
+		if len(idShort) > 8 {
+			idShort = idShort[:8] + "..."
+		}
 		rows[i] = []string{
-			f.ID[:8] + "...",
+			idShort,
 			truncate(f.Title, 40),
-			string(f.Severity),
-			string(f.Category),
-			string(f.Status),
+			f.Severity,
+			f.Category,
+			f.Status,
 		}
 	}
 	pdf.AddTable(headers, rows)
@@ -241,7 +258,6 @@ func (g *Generator) findingsToPDF(findings []*models.Finding, title string) ([]b
 	return pdf.Output()
 }
 
-// generateAssetsReport generates an assets report
 func (g *Generator) generateAssetsReport(ctx context.Context, req *ReportRequest) (*Report, error) {
 	assets, err := g.provider.GetAssets(ctx, AssetsFilter{
 		AccountIDs: req.AccountIDs,
@@ -282,14 +298,13 @@ func (g *Generator) generateAssetsReport(ctx context.Context, req *ReportRequest
 	}, nil
 }
 
-// assetsToCSV converts assets to CSV
-func (g *Generator) assetsToCSV(assets []*models.DataAsset) ([]byte, error) {
+func (g *Generator) assetsToCSV(assets []*ReportAsset) ([]byte, error) {
 	var buf bytes.Buffer
 	w := csv.NewWriter(&buf)
 
 	header := []string{
 		"ID", "Name", "Type", "Provider", "Account ID", "Region",
-		"Max Sensitivity", "Last Scanned", "Created At",
+		"Sensitivity", "Last Scanned", "Created At",
 	}
 	if err := w.Write(header); err != nil {
 		return nil, err
@@ -297,17 +312,17 @@ func (g *Generator) assetsToCSV(assets []*models.DataAsset) ([]byte, error) {
 
 	for _, a := range assets {
 		lastScanned := ""
-		if a.LastScanned != nil {
-			lastScanned = a.LastScanned.Format(time.RFC3339)
+		if a.LastScannedAt != nil {
+			lastScanned = a.LastScannedAt.Format(time.RFC3339)
 		}
 		row := []string{
 			a.ID,
 			a.Name,
-			string(a.AssetType),
-			string(a.Provider),
+			a.AssetType,
+			a.Provider,
 			a.AccountID,
 			a.Region,
-			string(a.Classification.MaxSensitivity),
+			a.Sensitivity,
 			lastScanned,
 			a.CreatedAt.Format(time.RFC3339),
 		}
@@ -320,8 +335,7 @@ func (g *Generator) assetsToCSV(assets []*models.DataAsset) ([]byte, error) {
 	return buf.Bytes(), w.Error()
 }
 
-// assetsToPDF generates a PDF report for assets
-func (g *Generator) assetsToPDF(assets []*models.DataAsset, title string) ([]byte, error) {
+func (g *Generator) assetsToPDF(assets []*ReportAsset, title string) ([]byte, error) {
 	pdf := NewPDFReport(title)
 
 	pdf.AddSection("Asset Inventory")
@@ -331,10 +345,10 @@ func (g *Generator) assetsToPDF(assets []*models.DataAsset, title string) ([]byt
 	for i, a := range assets {
 		rows[i] = []string{
 			truncate(a.Name, 30),
-			string(a.AssetType),
-			string(a.Provider),
+			a.AssetType,
+			a.Provider,
 			a.Region,
-			string(a.Classification.MaxSensitivity),
+			a.Sensitivity,
 		}
 	}
 	pdf.AddTable(headers, rows)
@@ -342,7 +356,6 @@ func (g *Generator) assetsToPDF(assets []*models.DataAsset, title string) ([]byt
 	return pdf.Output()
 }
 
-// generateClassificationReport generates a classification report
 func (g *Generator) generateClassificationReport(ctx context.Context, req *ReportRequest) (*Report, error) {
 	stats, err := g.provider.GetStats(ctx)
 	if err != nil {
@@ -381,7 +394,6 @@ func (g *Generator) generateClassificationReport(ctx context.Context, req *Repor
 	}, nil
 }
 
-// classificationToCSV converts classification stats to CSV
 func (g *Generator) classificationToCSV(stats *Stats) ([]byte, error) {
 	var buf bytes.Buffer
 	w := csv.NewWriter(&buf)
@@ -397,7 +409,7 @@ func (g *Generator) classificationToCSV(stats *Stats) ([]byte, error) {
 		return nil, err
 	}
 	for cat, count := range stats.ClassificationCounts {
-		if err := w.Write([]string{string(cat), fmt.Sprintf("%d", count)}); err != nil {
+		if err := w.Write([]string{cat, fmt.Sprintf("%d", count)}); err != nil {
 			return nil, err
 		}
 	}
@@ -409,7 +421,7 @@ func (g *Generator) classificationToCSV(stats *Stats) ([]byte, error) {
 		return nil, err
 	}
 	for sens, count := range stats.SensitivityCounts {
-		if err := w.Write([]string{string(sens), fmt.Sprintf("%d", count)}); err != nil {
+		if err := w.Write([]string{sens, fmt.Sprintf("%d", count)}); err != nil {
 			return nil, err
 		}
 	}
@@ -418,7 +430,6 @@ func (g *Generator) classificationToCSV(stats *Stats) ([]byte, error) {
 	return buf.Bytes(), w.Error()
 }
 
-// classificationToPDF generates a PDF classification report
 func (g *Generator) classificationToPDF(stats *Stats, title string) ([]byte, error) {
 	pdf := NewPDFReport(title)
 
@@ -426,7 +437,7 @@ func (g *Generator) classificationToPDF(stats *Stats, title string) ([]byte, err
 	catHeaders := []string{"Category", "Count"}
 	catRows := make([][]string, 0, len(stats.ClassificationCounts))
 	for cat, count := range stats.ClassificationCounts {
-		catRows = append(catRows, []string{string(cat), fmt.Sprintf("%d", count)})
+		catRows = append(catRows, []string{cat, fmt.Sprintf("%d", count)})
 	}
 	pdf.AddTable(catHeaders, catRows)
 
@@ -434,14 +445,13 @@ func (g *Generator) classificationToPDF(stats *Stats, title string) ([]byte, err
 	sensHeaders := []string{"Sensitivity", "Count"}
 	sensRows := make([][]string, 0, len(stats.SensitivityCounts))
 	for sens, count := range stats.SensitivityCounts {
-		sensRows = append(sensRows, []string{string(sens), fmt.Sprintf("%d", count)})
+		sensRows = append(sensRows, []string{sens, fmt.Sprintf("%d", count)})
 	}
 	pdf.AddTable(sensHeaders, sensRows)
 
 	return pdf.Output()
 }
 
-// generateExecutiveReport generates an executive summary report
 func (g *Generator) generateExecutiveReport(ctx context.Context, req *ReportRequest) (*Report, error) {
 	stats, err := g.provider.GetStats(ctx)
 	if err != nil {
@@ -485,8 +495,7 @@ func (g *Generator) generateExecutiveReport(ctx context.Context, req *ReportRequ
 	}, nil
 }
 
-// executiveToCSV generates executive summary CSV
-func (g *Generator) executiveToCSV(stats *Stats, accounts []*models.CloudAccount) ([]byte, error) {
+func (g *Generator) executiveToCSV(stats *Stats, accounts []*ReportAccount) ([]byte, error) {
 	var buf bytes.Buffer
 	w := csv.NewWriter(&buf)
 
@@ -507,14 +516,12 @@ func (g *Generator) executiveToCSV(stats *Stats, accounts []*models.CloudAccount
 	return buf.Bytes(), w.Error()
 }
 
-// executiveToPDF generates executive summary PDF
-func (g *Generator) executiveToPDF(stats *Stats, accounts []*models.CloudAccount, title string) ([]byte, error) {
+func (g *Generator) executiveToPDF(stats *Stats, accounts []*ReportAccount, title string) ([]byte, error) {
 	pdf := NewPDFReport(title)
 
 	pdf.AddSection("Executive Summary")
 	pdf.AddParagraph(fmt.Sprintf("Report generated on %s", time.Now().Format(time.RFC1123)))
 
-	// Key metrics
 	pdf.AddSection("Key Metrics")
 	pdf.AddSummaryTable(map[string]int{
 		"Total Accounts":    stats.TotalAccounts,
@@ -525,7 +532,6 @@ func (g *Generator) executiveToPDF(stats *Stats, accounts []*models.CloudAccount
 		"Open Findings":     stats.OpenFindings,
 	})
 
-	// Findings by severity
 	pdf.AddSection("Findings by Severity")
 	pdf.AddSummaryTable(map[string]int{
 		"Critical": stats.CriticalFindings,
@@ -534,19 +540,17 @@ func (g *Generator) executiveToPDF(stats *Stats, accounts []*models.CloudAccount
 		"Low":      stats.LowFindings,
 	})
 
-	// Cloud accounts
 	pdf.AddSection("Cloud Accounts")
 	accHeaders := []string{"Name", "Provider", "Status"}
 	accRows := make([][]string, len(accounts))
 	for i, a := range accounts {
-		accRows[i] = []string{a.Name, string(a.Provider), string(a.Status)}
+		accRows[i] = []string{a.Name, a.Provider, a.Status}
 	}
 	pdf.AddTable(accHeaders, accRows)
 
 	return pdf.Output()
 }
 
-// generateComplianceReport generates a compliance report
 func (g *Generator) generateComplianceReport(ctx context.Context, req *ReportRequest) (*Report, error) {
 	findings, err := g.provider.GetFindings(ctx, FindingsFilter{
 		AccountIDs: req.AccountIDs,
@@ -555,7 +559,6 @@ func (g *Generator) generateComplianceReport(ctx context.Context, req *ReportReq
 		return nil, fmt.Errorf("failed to fetch findings: %w", err)
 	}
 
-	// Group findings by compliance framework
 	complianceMap := g.mapFindingsToCompliance(findings)
 
 	var data []byte
@@ -590,42 +593,39 @@ func (g *Generator) generateComplianceReport(ctx context.Context, req *ReportReq
 	}, nil
 }
 
-// ComplianceStatus represents compliance status for a framework
 type ComplianceStatus struct {
 	Framework    string
 	TotalChecks  int
 	PassedChecks int
 	FailedChecks int
-	Findings     []*models.Finding
+	Findings     []*ReportFinding
 }
 
-// mapFindingsToCompliance maps findings to compliance frameworks
-func (g *Generator) mapFindingsToCompliance(findings []*models.Finding) map[string]*ComplianceStatus {
+func (g *Generator) mapFindingsToCompliance(findings []*ReportFinding) map[string]*ComplianceStatus {
 	frameworks := map[string]*ComplianceStatus{
-		"GDPR":     {Framework: "GDPR", TotalChecks: 10},
-		"HIPAA":    {Framework: "HIPAA", TotalChecks: 8},
-		"PCI-DSS":  {Framework: "PCI-DSS", TotalChecks: 12},
-		"SOC2":     {Framework: "SOC2", TotalChecks: 15},
+		"GDPR":    {Framework: "GDPR", TotalChecks: 10},
+		"HIPAA":   {Framework: "HIPAA", TotalChecks: 8},
+		"PCI-DSS": {Framework: "PCI-DSS", TotalChecks: 12},
+		"SOC2":    {Framework: "SOC2", TotalChecks: 15},
 	}
 
 	for _, f := range findings {
 		switch f.Category {
-		case models.CategoryPII:
+		case string(models.CategoryPII):
 			frameworks["GDPR"].Findings = append(frameworks["GDPR"].Findings, f)
 			frameworks["GDPR"].FailedChecks++
-		case models.CategoryPHI:
+		case string(models.CategoryPHI):
 			frameworks["HIPAA"].Findings = append(frameworks["HIPAA"].Findings, f)
 			frameworks["HIPAA"].FailedChecks++
-		case models.CategoryPCI:
+		case string(models.CategoryPCI):
 			frameworks["PCI-DSS"].Findings = append(frameworks["PCI-DSS"].Findings, f)
 			frameworks["PCI-DSS"].FailedChecks++
-		case models.CategorySecrets:
+		case string(models.CategorySecrets):
 			frameworks["SOC2"].Findings = append(frameworks["SOC2"].Findings, f)
 			frameworks["SOC2"].FailedChecks++
 		}
 	}
 
-	// Calculate passed checks
 	for _, status := range frameworks {
 		status.PassedChecks = status.TotalChecks - status.FailedChecks
 		if status.PassedChecks < 0 {
@@ -636,7 +636,6 @@ func (g *Generator) mapFindingsToCompliance(findings []*models.Finding) map[stri
 	return frameworks
 }
 
-// complianceToCSV generates compliance CSV
 func (g *Generator) complianceToCSV(complianceMap map[string]*ComplianceStatus) ([]byte, error) {
 	var buf bytes.Buffer
 	w := csv.NewWriter(&buf)
@@ -660,7 +659,6 @@ func (g *Generator) complianceToCSV(complianceMap map[string]*ComplianceStatus) 
 	return buf.Bytes(), w.Error()
 }
 
-// complianceToPDF generates compliance PDF
 func (g *Generator) complianceToPDF(complianceMap map[string]*ComplianceStatus, title string) ([]byte, error) {
 	pdf := NewPDFReport(title)
 
@@ -679,14 +677,13 @@ func (g *Generator) complianceToPDF(complianceMap map[string]*ComplianceStatus, 
 	}
 	pdf.AddTable(headers, rows)
 
-	// Details per framework
 	for _, status := range complianceMap {
 		if len(status.Findings) > 0 {
 			pdf.AddSection(fmt.Sprintf("%s Findings", status.Framework))
 			findHeaders := []string{"Title", "Severity", "Status"}
 			findRows := make([][]string, len(status.Findings))
 			for i, f := range status.Findings {
-				findRows[i] = []string{truncate(f.Title, 40), string(f.Severity), string(f.Status)}
+				findRows[i] = []string{truncate(f.Title, 40), f.Severity, f.Status}
 			}
 			pdf.AddTable(findHeaders, findRows)
 		}
@@ -702,7 +699,6 @@ func truncate(s string, length int) string {
 	return s[:length-3] + "..."
 }
 
-// StreamCSV streams CSV data to a writer
 func (g *Generator) StreamCSV(ctx context.Context, w io.Writer, req *ReportRequest) error {
 	csvWriter := csv.NewWriter(w)
 	defer csvWriter.Flush()
@@ -728,8 +724,8 @@ func (g *Generator) StreamCSV(ctx context.Context, w io.Writer, req *ReportReque
 
 		for _, f := range findings {
 			row := []string{
-				f.ID, f.Title, string(f.Severity), string(f.Category),
-				string(f.Status), f.AssetID, f.CreatedAt.Format(time.RFC3339),
+				f.ID, f.Title, f.Severity, f.Category,
+				f.Status, f.AssetID, f.CreatedAt.Format(time.RFC3339),
 			}
 			if err := csvWriter.Write(row); err != nil {
 				return err
@@ -749,8 +745,8 @@ func (g *Generator) StreamCSV(ctx context.Context, w io.Writer, req *ReportReque
 
 		for _, a := range assets {
 			row := []string{
-				a.ID, a.Name, string(a.AssetType), string(a.Provider),
-				a.Region, string(a.Classification.MaxSensitivity),
+				a.ID, a.Name, a.AssetType, a.Provider,
+				a.Region, a.Sensitivity,
 			}
 			if err := csvWriter.Write(row); err != nil {
 				return err

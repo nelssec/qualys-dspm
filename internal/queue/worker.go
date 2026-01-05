@@ -21,7 +21,6 @@ import (
 	"github.com/qualys/dspm/internal/store"
 )
 
-// Worker processes scan jobs from the queue
 type Worker struct {
 	id         string
 	queue      *Queue
@@ -30,24 +29,20 @@ type Worker struct {
 	scanner    *scanner.Scanner
 	classifier *classifier.Classifier
 
-	// Control
 	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 
-	// State
 	running bool
 	mu      sync.Mutex
 }
 
-// WorkerConfig holds worker configuration
 type WorkerConfig struct {
 	Queue  *Queue
 	Store  *store.Store
 	Config *config.Config
 }
 
-// NewWorker creates a new worker
 func NewWorker(cfg WorkerConfig) *Worker {
 	hostname, _ := os.Hostname()
 	workerID := fmt.Sprintf("%s-%s", hostname, uuid.New().String()[:8])
@@ -62,12 +57,10 @@ func NewWorker(cfg WorkerConfig) *Worker {
 	}
 }
 
-// ID returns the worker ID
 func (w *Worker) ID() string {
 	return w.id
 }
 
-// Start begins processing jobs
 func (w *Worker) Start(ctx context.Context) error {
 	w.mu.Lock()
 	if w.running {
@@ -80,22 +73,18 @@ func (w *Worker) Start(ctx context.Context) error {
 
 	log.Printf("[%s] Worker starting", w.id)
 
-	// Start heartbeat
 	w.wg.Add(1)
 	go w.heartbeatLoop()
 
-	// Start job processing
 	w.wg.Add(1)
 	go w.processLoop()
 
-	// Start result processor
 	w.wg.Add(1)
 	go w.resultProcessor()
 
 	return nil
 }
 
-// Stop gracefully stops the worker
 func (w *Worker) Stop() {
 	w.mu.Lock()
 	if !w.running {
@@ -143,7 +132,6 @@ func (w *Worker) processLoop() {
 			}
 
 			if job == nil {
-				// No jobs available, wait and retry
 				time.Sleep(1 * time.Second)
 				continue
 			}
@@ -163,7 +151,6 @@ func (w *Worker) processLoop() {
 }
 
 func (w *Worker) processJob(job *Job) error {
-	// Get account details
 	account, err := w.store.GetAccount(w.ctx, job.AccountID)
 	if err != nil {
 		return fmt.Errorf("getting account: %w", err)
@@ -172,19 +159,16 @@ func (w *Worker) processJob(job *Job) error {
 		return fmt.Errorf("account not found: %s", job.AccountID)
 	}
 
-	// Create connector based on provider
 	conn, err := w.createConnector(account)
 	if err != nil {
 		return fmt.Errorf("creating connector: %w", err)
 	}
 	defer conn.Close()
 
-	// Validate connection
 	if err := conn.Validate(w.ctx); err != nil {
 		return fmt.Errorf("validating connection: %w", err)
 	}
 
-	// Create scan job record
 	scanJob := &models.ScanJob{
 		ID:          job.ID,
 		AccountID:   job.AccountID,
@@ -193,10 +177,8 @@ func (w *Worker) processJob(job *Job) error {
 		WorkerID:    w.id,
 	}
 
-	// Update store
 	w.store.UpdateScanJobStatus(w.ctx, job.ID, models.ScanStatusRunning, w.id)
 
-	// Run scan based on type
 	switch job.ScanType {
 	case models.ScanTypeFull, models.ScanTypeAssetDiscovery, models.ScanTypeClassification:
 		return w.runStorageScan(job, conn, scanJob)
@@ -248,7 +230,6 @@ func (w *Worker) runStorageScan(job *Job, conn connectors.Connector, scanJob *mo
 		return fmt.Errorf("connector does not support storage operations")
 	}
 
-	// Convert scope
 	var scope *scanner.ScanScope
 	if job.Scope != nil {
 		scope = &scanner.ScanScope{
@@ -265,10 +246,8 @@ func (w *Worker) runStorageScan(job *Job, conn connectors.Connector, scanJob *mo
 		Scope:     scope,
 	}
 
-	// Get result channels
 	assetCh, classifyCh, findingCh, errorCh := w.scanner.Results()
 
-	// Start result collection in background
 	var resultWg sync.WaitGroup
 	resultWg.Add(1)
 	go func() {
@@ -276,16 +255,12 @@ func (w *Worker) runStorageScan(job *Job, conn connectors.Connector, scanJob *mo
 		w.collectResults(job.ID, assetCh, classifyCh, findingCh, errorCh)
 	}()
 
-	// Run scan
 	progress, err := w.scanner.ScanStorage(w.ctx, storageConn, scannerJob)
 
-	// Close channels to signal completion
 	w.scanner.Close()
 
-	// Wait for result collection
 	resultWg.Wait()
 
-	// Update final progress
 	if progress != nil {
 		w.queue.UpdateProgress(w.ctx, &JobProgress{
 			JobID:                job.ID,
@@ -311,19 +286,16 @@ func (w *Worker) runAccessScan(job *Job, conn connectors.Connector, scanJob *mod
 		return fmt.Errorf("connector does not support IAM operations")
 	}
 
-	// List users
 	users, err := iamConn.ListUsers(w.ctx)
 	if err != nil {
 		log.Printf("[%s] Error listing users: %v", w.id, err)
 	}
 
-	// List roles
 	roles, err := iamConn.ListRoles(w.ctx)
 	if err != nil {
 		log.Printf("[%s] Error listing roles: %v", w.id, err)
 	}
 
-	// List policies
 	policies, err := iamConn.ListPolicies(w.ctx)
 	if err != nil {
 		log.Printf("[%s] Error listing policies: %v", w.id, err)
@@ -332,7 +304,6 @@ func (w *Worker) runAccessScan(job *Job, conn connectors.Connector, scanJob *mod
 	log.Printf("[%s] Access scan found %d users, %d roles, %d policies",
 		w.id, len(users), len(roles), len(policies))
 
-	// Store policies
 	for _, policy := range policies {
 		policyDoc, _ := iamConn.GetPolicy(w.ctx, policy.ARN)
 
@@ -351,7 +322,6 @@ func (w *Worker) runAccessScan(job *Job, conn connectors.Connector, scanJob *mod
 			}
 		}
 
-		// TODO: Store to database
 	}
 
 	return nil
@@ -404,7 +374,6 @@ func (w *Worker) collectResults(jobID uuid.UUID,
 					}
 				}
 
-				// Update asset classification summary
 				if len(classification.Matches) > 0 {
 					maxSens := models.SensitivityUnknown
 					categories := make(map[models.Category]bool)
@@ -449,7 +418,6 @@ func (w *Worker) collectResults(jobID uuid.UUID,
 			}
 		}
 
-		// Check if all channels are closed
 		if assetCh == nil && classifyCh == nil && findingCh == nil && errorCh == nil {
 			return
 		}
@@ -459,7 +427,6 @@ func (w *Worker) collectResults(jobID uuid.UUID,
 func (w *Worker) resultProcessor() {
 	defer w.wg.Done()
 
-	// This goroutine handles periodic cleanup tasks
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 
@@ -468,7 +435,6 @@ func (w *Worker) resultProcessor() {
 		case <-w.ctx.Done():
 			return
 		case <-ticker.C:
-			// Cleanup stale jobs
 			cleaned, err := w.queue.CleanupStaleJobs(w.ctx, 30*time.Minute)
 			if err != nil {
 				log.Printf("[%s] Error cleaning stale jobs: %v", w.id, err)
@@ -478,8 +444,6 @@ func (w *Worker) resultProcessor() {
 		}
 	}
 }
-
-// Helper functions
 
 func getStringFromConfig(cfg models.JSONB, key, defaultVal string) string {
 	if val, ok := cfg[key].(string); ok {

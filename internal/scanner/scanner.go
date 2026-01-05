@@ -16,7 +16,6 @@ import (
 	"github.com/qualys/dspm/internal/models"
 )
 
-// Config holds scanner configuration
 type Config struct {
 	Workers         int
 	MaxFileSize     int64
@@ -26,7 +25,6 @@ type Config struct {
 	ScanTimeout     time.Duration
 }
 
-// DefaultConfig returns default scanner configuration
 func DefaultConfig() Config {
 	return Config{
 		Workers:         10,
@@ -38,25 +36,21 @@ func DefaultConfig() Config {
 	}
 }
 
-// Scanner orchestrates the scanning process
 type Scanner struct {
 	config     Config
 	classifier *classifier.Classifier
 
-	// Results channels
 	assetCh    chan *AssetResult
 	classifyCh chan *ClassificationResult
 	findingCh  chan *FindingResult
 	errorCh    chan *ScanError
 }
 
-// AssetResult contains discovered asset information
 type AssetResult struct {
 	Asset    *models.DataAsset
 	Metadata map[string]interface{}
 }
 
-// ClassificationResult contains classification findings
 type ClassificationResult struct {
 	AssetID      uuid.UUID
 	ObjectPath   string
@@ -65,19 +59,16 @@ type ClassificationResult struct {
 	ScannedBytes int64
 }
 
-// FindingResult contains security findings
 type FindingResult struct {
 	Finding *models.Finding
 }
 
-// ScanError represents a scan error
 type ScanError struct {
 	AssetARN string
 	Phase    string
 	Error    error
 }
 
-// ScanJob represents a scan job to process
 type ScanJob struct {
 	ID        uuid.UUID
 	AccountID uuid.UUID
@@ -85,28 +76,25 @@ type ScanJob struct {
 	Scope     *ScanScope
 }
 
-// ScanScope defines what to scan
 type ScanScope struct {
-	Buckets   []string // Specific buckets to scan (empty = all)
-	Regions   []string // Specific regions (empty = all)
-	Prefixes  []string // Object prefixes to include
-	MaxDepth  int      // Max directory depth
+	Buckets  []string // Specific buckets to scan (empty = all)
+	Regions  []string // Specific regions (empty = all)
+	Prefixes []string // Object prefixes to include
+	MaxDepth int      // Max directory depth
 }
 
-// ScanProgress tracks scan progress
 type ScanProgress struct {
-	TotalAssets       int
-	ScannedAssets     int
-	TotalObjects      int
-	ScannedObjects    int
+	TotalAssets          int
+	ScannedAssets        int
+	TotalObjects         int
+	ScannedObjects       int
 	ClassificationsFound int
-	FindingsFound     int
-	Errors            int
-	StartedAt         time.Time
-	mu                sync.Mutex
+	FindingsFound        int
+	Errors               int
+	StartedAt            time.Time
+	mu                   sync.Mutex
 }
 
-// New creates a new scanner
 func New(config Config) *Scanner {
 	return &Scanner{
 		config:     config,
@@ -118,24 +106,20 @@ func New(config Config) *Scanner {
 	}
 }
 
-// Results returns channels for receiving scan results
 func (s *Scanner) Results() (<-chan *AssetResult, <-chan *ClassificationResult, <-chan *FindingResult, <-chan *ScanError) {
 	return s.assetCh, s.classifyCh, s.findingCh, s.errorCh
 }
 
-// ScanStorage scans storage buckets using the provided connector
 func (s *Scanner) ScanStorage(ctx context.Context, conn connectors.StorageConnector, job *ScanJob) (*ScanProgress, error) {
 	progress := &ScanProgress{
 		StartedAt: time.Now(),
 	}
 
-	// Discover buckets
 	buckets, err := conn.ListBuckets(ctx)
 	if err != nil {
 		return progress, fmt.Errorf("listing buckets: %w", err)
 	}
 
-	// Filter buckets if scope specified
 	if job.Scope != nil && len(job.Scope.Buckets) > 0 {
 		filtered := make([]connectors.BucketInfo, 0)
 		bucketSet := make(map[string]bool)
@@ -152,11 +136,9 @@ func (s *Scanner) ScanStorage(ctx context.Context, conn connectors.StorageConnec
 
 	progress.TotalAssets = len(buckets)
 
-	// Create worker pool
 	bucketCh := make(chan connectors.BucketInfo, len(buckets))
 	var wg sync.WaitGroup
 
-	// Start workers
 	for i := 0; i < s.config.Workers; i++ {
 		wg.Add(1)
 		go func() {
@@ -167,7 +149,6 @@ func (s *Scanner) ScanStorage(ctx context.Context, conn connectors.StorageConnec
 		}()
 	}
 
-	// Queue buckets
 	for _, bucket := range buckets {
 		select {
 		case bucketCh <- bucket:
@@ -178,14 +159,12 @@ func (s *Scanner) ScanStorage(ctx context.Context, conn connectors.StorageConnec
 	}
 	close(bucketCh)
 
-	// Wait for completion
 	wg.Wait()
 
 	return progress, nil
 }
 
 func (s *Scanner) scanBucket(ctx context.Context, conn connectors.StorageConnector, bucket connectors.BucketInfo, job *ScanJob, progress *ScanProgress) {
-	// Get bucket metadata
 	metadata, err := conn.GetBucketMetadata(ctx, bucket.Name)
 	if err != nil {
 		s.errorCh <- &ScanError{
@@ -196,7 +175,6 @@ func (s *Scanner) scanBucket(ctx context.Context, conn connectors.StorageConnect
 		return
 	}
 
-	// Create asset record
 	asset := &models.DataAsset{
 		ID:           uuid.New(),
 		AccountID:    job.AccountID,
@@ -207,7 +185,6 @@ func (s *Scanner) scanBucket(ctx context.Context, conn connectors.StorageConnect
 		Tags:         models.JSONB(convertTags(metadata.Tags)),
 	}
 
-	// Set encryption status
 	if metadata.Encryption.Enabled {
 		asset.EncryptionStatus = metadata.Encryption.Type
 		asset.EncryptionKeyARN = metadata.Encryption.KeyARN
@@ -218,21 +195,18 @@ func (s *Scanner) scanBucket(ctx context.Context, conn connectors.StorageConnect
 	asset.VersioningEnabled = metadata.Versioning
 	asset.LoggingEnabled = metadata.Logging.Enabled
 
-	// Check for public access
 	asset.PublicAccess = !metadata.PublicAccessBlock.BlockPublicAcls ||
 		!metadata.PublicAccessBlock.BlockPublicPolicy
 
-	// Check bucket policy for public access
 	policy, err := conn.GetBucketPolicy(ctx, bucket.Name)
 	if err == nil && policy != nil && policy.IsPublic {
 		asset.PublicAccess = true
 		asset.PublicAccessDetails = models.JSONB{
-			"policy_public": true,
+			"policy_public":  true,
 			"public_actions": policy.PublicActions,
 		}
 	}
 
-	// Check ACL for public access
 	acl, err := conn.GetBucketACL(ctx, bucket.Name)
 	if err == nil && acl != nil {
 		for _, grant := range acl.Grants {
@@ -247,10 +221,8 @@ func (s *Scanner) scanBucket(ctx context.Context, conn connectors.StorageConnect
 		}
 	}
 
-	// Generate findings for security issues
 	s.generateBucketFindings(asset, metadata, job.AccountID)
 
-	// Emit asset
 	s.assetCh <- &AssetResult{
 		Asset: asset,
 		Metadata: map[string]interface{}{
@@ -260,7 +232,6 @@ func (s *Scanner) scanBucket(ctx context.Context, conn connectors.StorageConnect
 		},
 	}
 
-	// Scan bucket contents
 	if job.ScanType == models.ScanTypeFull || job.ScanType == models.ScanTypeClassification {
 		s.scanBucketContents(ctx, conn, bucket.Name, asset.ID, job, progress)
 	}
@@ -271,7 +242,6 @@ func (s *Scanner) scanBucket(ctx context.Context, conn connectors.StorageConnect
 }
 
 func (s *Scanner) scanBucketContents(ctx context.Context, conn connectors.StorageConnector, bucketName string, assetID uuid.UUID, job *ScanJob, progress *ScanProgress) {
-	// List objects
 	objects, err := conn.ListObjects(ctx, bucketName, "", s.config.FilesPerBucket)
 	if err != nil {
 		s.errorCh <- &ScanError{
@@ -286,10 +256,8 @@ func (s *Scanner) scanBucketContents(ctx context.Context, conn connectors.Storag
 	progress.TotalObjects += len(objects)
 	progress.mu.Unlock()
 
-	// Filter and prioritize objects
 	scannable := s.filterScannable(objects)
 
-	// Create object worker pool
 	objectCh := make(chan connectors.ObjectInfo, len(scannable))
 	var wg sync.WaitGroup
 
@@ -308,7 +276,6 @@ func (s *Scanner) scanBucketContents(ctx context.Context, conn connectors.Storag
 		}()
 	}
 
-	// Queue objects
 	for _, obj := range scannable {
 		select {
 		case objectCh <- obj:
@@ -329,17 +296,14 @@ func (s *Scanner) scanObject(ctx context.Context, conn connectors.StorageConnect
 		progress.mu.Unlock()
 	}()
 
-	// Determine byte range to sample
 	var byteRange *connectors.ByteRange
 	if obj.Size > s.config.SampleSize {
-		// Sample from beginning
 		byteRange = &connectors.ByteRange{
 			Start: 0,
 			End:   s.config.SampleSize - 1,
 		}
 	}
 
-	// Get object content
 	reader, err := conn.GetObject(ctx, bucketName, obj.Key, byteRange)
 	if err != nil {
 		s.errorCh <- &ScanError{
@@ -351,7 +315,6 @@ func (s *Scanner) scanObject(ctx context.Context, conn connectors.StorageConnect
 	}
 	defer reader.Close()
 
-	// Read content
 	content, err := io.ReadAll(io.LimitReader(reader, s.config.SampleSize))
 	if err != nil {
 		s.errorCh <- &ScanError{
@@ -362,7 +325,6 @@ func (s *Scanner) scanObject(ctx context.Context, conn connectors.StorageConnect
 		return
 	}
 
-	// Classify content
 	result := s.classifier.Classify(string(content))
 
 	if len(result.Matches) > 0 {
@@ -381,14 +343,12 @@ func (s *Scanner) scanObject(ctx context.Context, conn connectors.StorageConnect
 }
 
 func (s *Scanner) filterScannable(objects []connectors.ObjectInfo) []connectors.ObjectInfo {
-	// High priority extensions
 	highPriority := map[string]bool{
 		".csv": true, ".json": true, ".xlsx": true, ".xls": true,
 		".parquet": true, ".sql": true, ".log": true, ".txt": true,
 		".tsv": true, ".xml": true, ".yaml": true, ".yml": true,
 	}
 
-	// Skip extensions
 	skip := map[string]bool{
 		".jpg": true, ".jpeg": true, ".png": true, ".gif": true,
 		".mp4": true, ".mp3": true, ".wav": true, ".avi": true,
@@ -400,24 +360,20 @@ func (s *Scanner) filterScannable(objects []connectors.ObjectInfo) []connectors.
 	var high, medium []connectors.ObjectInfo
 
 	for _, obj := range objects {
-		// Skip if too large
 		if obj.Size > s.config.MaxFileSize {
 			continue
 		}
 
-		// Skip if empty
 		if obj.Size == 0 {
 			continue
 		}
 
 		ext := strings.ToLower(filepath.Ext(obj.Key))
 
-		// Skip known binary types
 		if skip[ext] {
 			continue
 		}
 
-		// Prioritize high-value extensions
 		if highPriority[ext] {
 			high = append(high, obj)
 		} else {
@@ -425,10 +381,8 @@ func (s *Scanner) filterScannable(objects []connectors.ObjectInfo) []connectors.
 		}
 	}
 
-	// Return high priority first, then medium
 	result := append(high, medium...)
 
-	// Limit total objects
 	if len(result) > s.config.FilesPerBucket {
 		result = result[:s.config.FilesPerBucket]
 	}
@@ -439,7 +393,6 @@ func (s *Scanner) filterScannable(objects []connectors.ObjectInfo) []connectors.
 func (s *Scanner) generateBucketFindings(asset *models.DataAsset, metadata *connectors.BucketMetadata, accountID uuid.UUID) {
 	now := time.Now()
 
-	// Public bucket finding
 	if asset.PublicAccess {
 		s.findingCh <- &FindingResult{
 			Finding: &models.Finding{
@@ -466,7 +419,6 @@ func (s *Scanner) generateBucketFindings(asset *models.DataAsset, metadata *conn
 		}
 	}
 
-	// Unencrypted bucket finding
 	if asset.EncryptionStatus == models.EncryptionNone {
 		s.findingCh <- &FindingResult{
 			Finding: &models.Finding{
@@ -490,7 +442,6 @@ func (s *Scanner) generateBucketFindings(asset *models.DataAsset, metadata *conn
 		}
 	}
 
-	// No versioning finding
 	if !asset.VersioningEnabled {
 		s.findingCh <- &FindingResult{
 			Finding: &models.Finding{
@@ -514,7 +465,6 @@ func (s *Scanner) generateBucketFindings(asset *models.DataAsset, metadata *conn
 		}
 	}
 
-	// No logging finding
 	if !asset.LoggingEnabled {
 		s.findingCh <- &FindingResult{
 			Finding: &models.Finding{
@@ -547,7 +497,6 @@ func convertTags(tags map[string]string) map[string]interface{} {
 	return result
 }
 
-// Close closes result channels
 func (s *Scanner) Close() {
 	close(s.assetCh)
 	close(s.classifyCh)

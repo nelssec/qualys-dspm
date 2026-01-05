@@ -12,8 +12,6 @@ import (
 	"github.com/qualys/dspm/internal/store"
 )
 
-// --- Account Handlers ---
-
 func (s *Server) listAccounts(w http.ResponseWriter, r *http.Request) {
 	var provider *models.Provider
 	var status *string
@@ -54,7 +52,6 @@ func (s *Server) createAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if account already exists
 	existing, err := s.store.GetAccountByExternalID(r.Context(), req.Provider, req.ExternalID)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "db_error", err.Error())
@@ -146,7 +143,6 @@ func (s *Server) triggerScan(w http.ResponseWriter, r *http.Request) {
 		req.ScanType = models.ScanTypeFull
 	}
 
-	// Verify account exists
 	account, err := s.store.GetAccount(r.Context(), accountID)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "db_error", err.Error())
@@ -157,7 +153,6 @@ func (s *Server) triggerScan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create scan job
 	job := &models.ScanJob{
 		AccountID:   accountID,
 		ScanType:    req.ScanType,
@@ -178,8 +173,6 @@ func (s *Server) triggerScan(w http.ResponseWriter, r *http.Request) {
 
 	respondJSON(w, http.StatusAccepted, job)
 }
-
-// --- Asset Handlers ---
 
 func (s *Server) listAssets(w http.ResponseWriter, r *http.Request) {
 	filters := store.ListAssetFilters{
@@ -264,8 +257,6 @@ func (s *Server) getAssetClassifications(w http.ResponseWriter, r *http.Request)
 
 	respondJSON(w, http.StatusOK, classifications)
 }
-
-// --- Finding Handlers ---
 
 func (s *Server) listFindings(w http.ResponseWriter, r *http.Request) {
 	filters := store.ListFindingFilters{
@@ -368,15 +359,17 @@ func (s *Server) updateFindingStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Return updated finding
-	finding, _ := s.store.GetFinding(r.Context(), id)
+	finding, err := s.store.GetFinding(r.Context(), id)
+	if err != nil {
+
+		respondJSON(w, http.StatusOK, map[string]string{"id": id.String(), "status": string(req.Status)})
+		return
+	}
 	respondJSON(w, http.StatusOK, finding)
 }
 
-// --- Scan Handlers ---
-
 func (s *Server) listScans(w http.ResponseWriter, r *http.Request) {
-	// Get pending scans for now - can expand to all scans with filtering
+
 	scans, err := s.store.ListPendingScanJobs(r.Context(), 100)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "db_error", err.Error())
@@ -407,8 +400,6 @@ func (s *Server) getScan(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, scan)
 }
 
-// --- Dashboard Handlers ---
-
 type dashboardSummary struct {
 	Accounts struct {
 		Total  int `json:"total"`
@@ -425,7 +416,7 @@ type dashboardSummary struct {
 		Critical int `json:"critical"`
 	} `json:"findings"`
 	Classifications struct {
-		Total int            `json:"total"`
+		Total      int            `json:"total"`
 		ByCategory map[string]int `json:"by_category"`
 	} `json:"classifications"`
 }
@@ -433,41 +424,27 @@ type dashboardSummary struct {
 func (s *Server) getDashboardSummary(w http.ResponseWriter, r *http.Request) {
 	summary := dashboardSummary{}
 
-	// Get accounts
-	accounts, _ := s.store.ListAccounts(r.Context(), nil, nil)
-	summary.Accounts.Total = len(accounts)
-	for _, acc := range accounts {
-		if acc.Status == "active" {
-			summary.Accounts.Active++
-		}
+	counts, err := s.store.GetDashboardCounts(r.Context())
+	if err != nil {
+		s.logger.Error("failed to get dashboard counts", "error", err)
+		respondError(w, http.StatusInternalServerError, "db_error", "Failed to load dashboard")
+		return
 	}
 
-	// Get assets
-	allAssets, total, _ := s.store.ListAssets(r.Context(), store.ListAssetFilters{Limit: 10000})
-	summary.Assets.Total = total
-	for _, asset := range allAssets {
-		if asset.PublicAccess {
-			summary.Assets.Public++
-		}
-		if asset.SensitivityLevel == models.SensitivityCritical {
-			summary.Assets.Critical++
-		}
-	}
+	summary.Accounts.Total = counts.TotalAccounts
+	summary.Accounts.Active = counts.ActiveAccounts
+	summary.Assets.Total = counts.TotalAssets
+	summary.Assets.Public = counts.PublicAssets
+	summary.Assets.Critical = counts.CriticalAssets
+	summary.Findings.Total = counts.TotalFindings
+	summary.Findings.Open = counts.OpenFindings
+	summary.Findings.Critical = counts.CriticalFindings
 
-	// Get findings
-	findings, findingTotal, _ := s.store.ListFindings(r.Context(), store.ListFindingFilters{Limit: 10000})
-	summary.Findings.Total = findingTotal
-	for _, f := range findings {
-		if f.Status == models.FindingStatusOpen {
-			summary.Findings.Open++
-		}
-		if f.Severity == models.SeverityCritical {
-			summary.Findings.Critical++
-		}
+	classStats, err := s.store.GetClassificationStats(r.Context(), nil)
+	if err != nil {
+		s.logger.Warn("failed to get classification stats", "error", err)
+		classStats = make(map[string]int)
 	}
-
-	// Get classification stats
-	classStats, _ := s.store.GetClassificationStats(r.Context(), nil)
 	summary.Classifications.ByCategory = classStats
 	for _, count := range classStats {
 		summary.Classifications.Total += count

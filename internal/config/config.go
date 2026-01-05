@@ -10,7 +10,6 @@ import (
 	"github.com/qualys/dspm/internal/models"
 )
 
-// Config holds all application configuration
 type Config struct {
 	Server        ServerConfig        `yaml:"server"`
 	Database      DatabaseConfig      `yaml:"database"`
@@ -24,28 +23,24 @@ type Config struct {
 	Notifications NotificationsConfig `yaml:"notifications"`
 }
 
-// AuthConfig holds authentication configuration
 type AuthConfig struct {
 	JWTSecret          string        `yaml:"jwt_secret"`
 	AccessTokenExpiry  time.Duration `yaml:"access_token_expiry"`
 	RefreshTokenExpiry time.Duration `yaml:"refresh_token_expiry"`
 }
 
-// NotificationsConfig holds notification configuration
 type NotificationsConfig struct {
 	MinSeverity models.Sensitivity `yaml:"min_severity"`
 	Slack       SlackNotifyConfig  `yaml:"slack"`
 	Email       EmailNotifyConfig  `yaml:"email"`
 }
 
-// SlackNotifyConfig holds Slack notification settings
 type SlackNotifyConfig struct {
 	Enabled    bool   `yaml:"enabled"`
 	WebhookURL string `yaml:"webhook_url"`
 	Channel    string `yaml:"channel"`
 }
 
-// EmailNotifyConfig holds email notification settings
 type EmailNotifyConfig struct {
 	Enabled  bool     `yaml:"enabled"`
 	SMTPHost string   `yaml:"smtp_host"`
@@ -56,15 +51,14 @@ type EmailNotifyConfig struct {
 	To       []string `yaml:"to"`
 }
 
-// ServerConfig holds HTTP server configuration
 type ServerConfig struct {
-	Host         string        `yaml:"host"`
-	Port         int           `yaml:"port"`
-	ReadTimeout  time.Duration `yaml:"read_timeout"`
-	WriteTimeout time.Duration `yaml:"write_timeout"`
+	Host            string        `yaml:"host"`
+	Port            int           `yaml:"port"`
+	ReadTimeout     time.Duration `yaml:"read_timeout"`
+	WriteTimeout    time.Duration `yaml:"write_timeout"`
+	CORSAllowOrigin string        `yaml:"cors_allow_origin"`
 }
 
-// DatabaseConfig holds PostgreSQL configuration
 type DatabaseConfig struct {
 	Host         string `yaml:"host"`
 	Port         int    `yaml:"port"`
@@ -76,7 +70,6 @@ type DatabaseConfig struct {
 	MaxIdleConns int    `yaml:"max_idle_conns"`
 }
 
-// DSN returns the PostgreSQL connection string
 func (c DatabaseConfig) DSN() string {
 	return fmt.Sprintf(
 		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
@@ -84,7 +77,6 @@ func (c DatabaseConfig) DSN() string {
 	)
 }
 
-// RedisConfig holds Redis configuration
 type RedisConfig struct {
 	Host     string `yaml:"host"`
 	Port     int    `yaml:"port"`
@@ -92,19 +84,16 @@ type RedisConfig struct {
 	DB       int    `yaml:"db"`
 }
 
-// Addr returns the Redis address
 func (c RedisConfig) Addr() string {
 	return fmt.Sprintf("%s:%d", c.Host, c.Port)
 }
 
-// Neo4jConfig holds Neo4j configuration
 type Neo4jConfig struct {
 	URI      string `yaml:"uri"`
 	User     string `yaml:"user"`
 	Password string `yaml:"password"`
 }
 
-// ScannerConfig holds scanner worker configuration
 type ScannerConfig struct {
 	Workers          int           `yaml:"workers"`
 	BatchSize        int           `yaml:"batch_size"`
@@ -116,7 +105,6 @@ type ScannerConfig struct {
 	EnabledProviders []string      `yaml:"enabled_providers"`
 }
 
-// AWSConfig holds AWS-specific configuration
 type AWSConfig struct {
 	Region          string `yaml:"region"`
 	AssumeRoleARN   string `yaml:"assume_role_arn"`
@@ -125,7 +113,6 @@ type AWSConfig struct {
 	SecretAccessKey string `yaml:"secret_access_key"`
 }
 
-// AzureConfig holds Azure-specific configuration
 type AzureConfig struct {
 	TenantID       string `yaml:"tenant_id"`
 	ClientID       string `yaml:"client_id"`
@@ -133,24 +120,21 @@ type AzureConfig struct {
 	SubscriptionID string `yaml:"subscription_id"`
 }
 
-// GCPConfig holds GCP-specific configuration
 type GCPConfig struct {
 	ProjectID       string `yaml:"project_id"`
 	CredentialsFile string `yaml:"credentials_file"`
 }
 
-// Load reads and parses configuration from a YAML file
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		// Return default config if file doesn't exist
+
 		if os.IsNotExist(err) {
 			return defaultConfig(), nil
 		}
 		return nil, fmt.Errorf("reading config file: %w", err)
 	}
 
-	// Expand environment variables
 	data = []byte(os.ExpandEnv(string(data)))
 
 	var cfg Config
@@ -158,13 +142,11 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("parsing config file: %w", err)
 	}
 
-	// Apply defaults for unset values
 	cfg.applyDefaults()
 
 	return &cfg, nil
 }
 
-// defaultConfig returns a configuration with sensible defaults
 func defaultConfig() *Config {
 	cfg := &Config{}
 	cfg.applyDefaults()
@@ -172,7 +154,7 @@ func defaultConfig() *Config {
 }
 
 func (c *Config) applyDefaults() {
-	// Server defaults
+
 	if c.Server.Host == "" {
 		c.Server.Host = "0.0.0.0"
 	}
@@ -186,7 +168,6 @@ func (c *Config) applyDefaults() {
 		c.Server.WriteTimeout = 30 * time.Second
 	}
 
-	// Database defaults
 	if c.Database.Host == "" {
 		c.Database.Host = "localhost"
 	}
@@ -203,7 +184,6 @@ func (c *Config) applyDefaults() {
 		c.Database.MaxIdleConns = 5
 	}
 
-	// Redis defaults
 	if c.Redis.Host == "" {
 		c.Redis.Host = "localhost"
 	}
@@ -211,12 +191,10 @@ func (c *Config) applyDefaults() {
 		c.Redis.Port = 6379
 	}
 
-	// Neo4j defaults
 	if c.Neo4j.URI == "" {
 		c.Neo4j.URI = "bolt://localhost:7687"
 	}
 
-	// Scanner defaults
 	if c.Scanner.Workers == 0 {
 		c.Scanner.Workers = 10
 	}
@@ -227,10 +205,10 @@ func (c *Config) applyDefaults() {
 		c.Scanner.ScanTimeout = 5 * time.Minute
 	}
 	if c.Scanner.MaxFileSize == 0 {
-		c.Scanner.MaxFileSize = 100 * 1024 * 1024 // 100MB
+		c.Scanner.MaxFileSize = 100 * 1024 * 1024
 	}
 	if c.Scanner.SampleSize == 0 {
-		c.Scanner.SampleSize = 1 * 1024 * 1024 // 1MB
+		c.Scanner.SampleSize = 1 * 1024 * 1024
 	}
 	if c.Scanner.FilesPerBucket == 0 {
 		c.Scanner.FilesPerBucket = 1000
@@ -239,9 +217,10 @@ func (c *Config) applyDefaults() {
 		c.Scanner.RandomSamplePct = 0.10
 	}
 
-	// Auth defaults
 	if c.Auth.JWTSecret == "" {
 		c.Auth.JWTSecret = "change-me-in-production"
+
+		fmt.Println("WARNING: Using default JWT secret. Set auth.jwt_secret in production!")
 	}
 	if c.Auth.AccessTokenExpiry == 0 {
 		c.Auth.AccessTokenExpiry = 15 * time.Minute
@@ -250,7 +229,6 @@ func (c *Config) applyDefaults() {
 		c.Auth.RefreshTokenExpiry = 7 * 24 * time.Hour
 	}
 
-	// Notifications defaults
 	if c.Notifications.MinSeverity == "" {
 		c.Notifications.MinSeverity = models.SensitivityHigh
 	}

@@ -10,26 +10,22 @@ import (
 	"github.com/qualys/dspm/internal/models"
 )
 
-// Graph manages the access relationship graph in Neo4j
 type Graph struct {
 	driver neo4j.DriverWithContext
 }
 
-// Config holds Neo4j configuration
 type Config struct {
 	URI      string
 	Username string
 	Password string
 }
 
-// New creates a new access graph
 func New(cfg Config) (*Graph, error) {
 	driver, err := neo4j.NewDriverWithContext(cfg.URI, neo4j.BasicAuth(cfg.Username, cfg.Password, ""))
 	if err != nil {
 		return nil, fmt.Errorf("creating neo4j driver: %w", err)
 	}
 
-	// Verify connectivity
 	ctx := context.Background()
 	if err := driver.VerifyConnectivity(ctx); err != nil {
 		return nil, fmt.Errorf("verifying neo4j connectivity: %w", err)
@@ -37,7 +33,6 @@ func New(cfg Config) (*Graph, error) {
 
 	g := &Graph{driver: driver}
 
-	// Create indexes
 	if err := g.createIndexes(ctx); err != nil {
 		return nil, fmt.Errorf("creating indexes: %w", err)
 	}
@@ -45,7 +40,6 @@ func New(cfg Config) (*Graph, error) {
 	return g, nil
 }
 
-// Close closes the Neo4j connection
 func (g *Graph) Close(ctx context.Context) error {
 	return g.driver.Close(ctx)
 }
@@ -74,9 +68,6 @@ func (g *Graph) createIndexes(ctx context.Context) error {
 	return nil
 }
 
-// --- Node Operations ---
-
-// UpsertAccount creates or updates a cloud account node
 func (g *Graph) UpsertAccount(ctx context.Context, account *models.CloudAccount) error {
 	session := g.driver.NewSession(ctx, neo4j.SessionConfig{})
 	defer session.Close(ctx)
@@ -100,7 +91,6 @@ func (g *Graph) UpsertAccount(ctx context.Context, account *models.CloudAccount)
 	return err
 }
 
-// UpsertAsset creates or updates a data asset node
 func (g *Graph) UpsertAsset(ctx context.Context, asset *models.DataAsset) error {
 	session := g.driver.NewSession(ctx, neo4j.SessionConfig{})
 	defer session.Close(ctx)
@@ -134,7 +124,6 @@ func (g *Graph) UpsertAsset(ctx context.Context, asset *models.DataAsset) error 
 	return err
 }
 
-// UpsertPrincipal creates or updates a principal node
 func (g *Graph) UpsertPrincipal(ctx context.Context, accountID uuid.UUID, principal *Principal) error {
 	session := g.driver.NewSession(ctx, neo4j.SessionConfig{})
 	defer session.Close(ctx)
@@ -161,7 +150,6 @@ func (g *Graph) UpsertPrincipal(ctx context.Context, accountID uuid.UUID, princi
 	return err
 }
 
-// UpsertPolicy creates or updates a policy node
 func (g *Graph) UpsertPolicy(ctx context.Context, policy *models.AccessPolicy) error {
 	session := g.driver.NewSession(ctx, neo4j.SessionConfig{})
 	defer session.Close(ctx)
@@ -185,9 +173,6 @@ func (g *Graph) UpsertPolicy(ctx context.Context, policy *models.AccessPolicy) e
 	return err
 }
 
-// --- Relationship Operations ---
-
-// CreateAccessEdge creates an access relationship between principal and asset
 func (g *Graph) CreateAccessEdge(ctx context.Context, edge *models.AccessEdge) error {
 	session := g.driver.NewSession(ctx, neo4j.SessionConfig{})
 	defer session.Close(ctx)
@@ -205,20 +190,19 @@ func (g *Graph) CreateAccessEdge(ctx context.Context, edge *models.AccessEdge) e
 	`
 
 	_, err := session.Run(ctx, query, map[string]interface{}{
-		"id":             edge.ID.String(),
-		"sourceArn":      edge.SourceARN,
-		"targetAssetId":  edge.TargetAssetID.String(),
-		"permissions":    edge.Permissions,
+		"id":              edge.ID.String(),
+		"sourceArn":       edge.SourceARN,
+		"targetAssetId":   edge.TargetAssetID.String(),
+		"permissions":     edge.Permissions,
 		"permissionLevel": string(edge.PermissionLevel),
-		"isDirect":       edge.IsDirect,
-		"isPublic":       edge.IsPublic,
-		"isCrossAccount": edge.IsCrossAccount,
+		"isDirect":        edge.IsDirect,
+		"isPublic":        edge.IsPublic,
+		"isCrossAccount":  edge.IsCrossAccount,
 	})
 
 	return err
 }
 
-// CreatePublicAccess creates a public access edge
 func (g *Graph) CreatePublicAccess(ctx context.Context, assetID uuid.UUID, permissions []string) error {
 	session := g.driver.NewSession(ctx, neo4j.SessionConfig{})
 	defer session.Close(ctx)
@@ -240,7 +224,6 @@ func (g *Graph) CreatePublicAccess(ctx context.Context, assetID uuid.UUID, permi
 	return err
 }
 
-// CreateRoleAssumption creates a role assumption relationship
 func (g *Graph) CreateRoleAssumption(ctx context.Context, sourceARN, targetRoleARN string) error {
 	session := g.driver.NewSession(ctx, neo4j.SessionConfig{})
 	defer session.Close(ctx)
@@ -259,7 +242,6 @@ func (g *Graph) CreateRoleAssumption(ctx context.Context, sourceARN, targetRoleA
 	return err
 }
 
-// CreatePolicyAttachment creates a policy attachment relationship
 func (g *Graph) CreatePolicyAttachment(ctx context.Context, policyARN, principalARN string) error {
 	session := g.driver.NewSession(ctx, neo4j.SessionConfig{})
 	defer session.Close(ctx)
@@ -278,7 +260,6 @@ func (g *Graph) CreatePolicyAttachment(ctx context.Context, policyARN, principal
 	return err
 }
 
-// AddClassification adds classification data to an asset
 func (g *Graph) AddClassification(ctx context.Context, assetID uuid.UUID, category models.Category, sensitivity models.Sensitivity, count int) error {
 	session := g.driver.NewSession(ctx, neo4j.SessionConfig{})
 	defer session.Close(ctx)
@@ -301,9 +282,6 @@ func (g *Graph) AddClassification(ctx context.Context, assetID uuid.UUID, catego
 	return err
 }
 
-// --- Query Operations ---
-
-// PathResult represents an access path
 type PathResult struct {
 	Source      string   `json:"source"`
 	Target      string   `json:"target"`
@@ -313,7 +291,6 @@ type PathResult struct {
 	HopCount    int      `json:"hop_count"`
 }
 
-// FindPublicAccessPaths finds all paths from public to sensitive assets
 func (g *Graph) FindPublicAccessPaths(ctx context.Context, accountID *uuid.UUID, maxHops int) ([]PathResult, error) {
 	session := g.driver.NewSession(ctx, neo4j.SessionConfig{})
 	defer session.Close(ctx)
@@ -375,7 +352,6 @@ func (g *Graph) FindPublicAccessPaths(ctx context.Context, accountID *uuid.UUID,
 	return paths, nil
 }
 
-// FindAccessToPII finds all principals with access to PII data
 func (g *Graph) FindAccessToPII(ctx context.Context, accountID *uuid.UUID) ([]AccessRecord, error) {
 	session := g.driver.NewSession(ctx, neo4j.SessionConfig{})
 	defer session.Close(ctx)
@@ -441,7 +417,6 @@ func (g *Graph) FindAccessToPII(ctx context.Context, accountID *uuid.UUID) ([]Ac
 	return records, nil
 }
 
-// FindOverprivilegedAccess finds principals with admin access to sensitive data
 func (g *Graph) FindOverprivilegedAccess(ctx context.Context, accountID *uuid.UUID) ([]AccessRecord, error) {
 	session := g.driver.NewSession(ctx, neo4j.SessionConfig{})
 	defer session.Close(ctx)
@@ -499,7 +474,6 @@ func (g *Graph) FindOverprivilegedAccess(ctx context.Context, accountID *uuid.UU
 	return records, nil
 }
 
-// FindCrossAccountAccess finds access from external accounts
 func (g *Graph) FindCrossAccountAccess(ctx context.Context, accountID uuid.UUID) ([]AccessRecord, error) {
 	session := g.driver.NewSession(ctx, neo4j.SessionConfig{})
 	defer session.Close(ctx)
@@ -555,14 +529,12 @@ func (g *Graph) FindCrossAccountAccess(ctx context.Context, accountID uuid.UUID)
 	return records, nil
 }
 
-// GetAccessStats returns access statistics
 func (g *Graph) GetAccessStats(ctx context.Context, accountID *uuid.UUID) (*AccessStats, error) {
 	session := g.driver.NewSession(ctx, neo4j.SessionConfig{})
 	defer session.Close(ctx)
 
 	stats := &AccessStats{}
 
-	// Count principals by type
 	query := `
 		MATCH (p:Principal)
 		WHERE $accountId IS NULL OR p.accountId = $accountId
@@ -585,7 +557,6 @@ func (g *Graph) GetAccessStats(ctx context.Context, accountID *uuid.UUID) (*Acce
 		}
 	}
 
-	// Count public access
 	query = `
 		MATCH (p:Principal {type: 'PUBLIC'})-[:CAN_ACCESS]->(a:DataAsset)
 		WHERE $accountId IS NULL OR a.accountId = $accountId
@@ -598,7 +569,6 @@ func (g *Graph) GetAccessStats(ctx context.Context, accountID *uuid.UUID) (*Acce
 		stats.PublicAccessCount = int(count.(int64))
 	}
 
-	// Count cross-account access
 	query = `
 		MATCH ()-[r:CAN_ACCESS {isCrossAccount: true}]->()
 		RETURN count(r) as count
@@ -610,7 +580,6 @@ func (g *Graph) GetAccessStats(ctx context.Context, accountID *uuid.UUID) (*Acce
 		stats.CrossAccountCount = int(count.(int64))
 	}
 
-	// Count admin access to sensitive
 	query = `
 		MATCH ()-[r:CAN_ACCESS]->(a:DataAsset)
 		WHERE r.permissionLevel IN ['ADMIN', 'FULL']
@@ -627,9 +596,6 @@ func (g *Graph) GetAccessStats(ctx context.Context, accountID *uuid.UUID) (*Acce
 	return stats, nil
 }
 
-// --- Types ---
-
-// Principal represents a principal in the graph
 type Principal struct {
 	ID   uuid.UUID
 	ARN  string
@@ -637,7 +603,6 @@ type Principal struct {
 	Type string // USER, ROLE, SERVICE, GROUP
 }
 
-// AccessRecord represents an access relationship
 type AccessRecord struct {
 	PrincipalARN    string   `json:"principal_arn"`
 	PrincipalType   string   `json:"principal_type"`
@@ -649,7 +614,6 @@ type AccessRecord struct {
 	CrossAccount    bool     `json:"cross_account"`
 }
 
-// AccessStats holds access statistics
 type AccessStats struct {
 	PrincipalsByType    map[string]int `json:"principals_by_type"`
 	PublicAccessCount   int            `json:"public_access_count"`

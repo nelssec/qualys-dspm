@@ -10,7 +10,6 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
-// Job represents a scheduled job
 type Job struct {
 	ID          string            `json:"id" db:"id"`
 	Name        string            `json:"name" db:"name"`
@@ -25,29 +24,26 @@ type Job struct {
 	UpdatedAt   time.Time         `json:"updated_at" db:"updated_at"`
 }
 
-// JobType defines the type of scheduled job
 type JobType string
 
 const (
-	JobTypeScanAccount    JobType = "scan_account"
+	JobTypeScanAccount     JobType = "scan_account"
 	JobTypeScanAllAccounts JobType = "scan_all_accounts"
-	JobTypeCleanupOld     JobType = "cleanup_old"
-	JobTypeGenerateReport JobType = "generate_report"
+	JobTypeCleanupOld      JobType = "cleanup_old"
+	JobTypeGenerateReport  JobType = "generate_report"
 	JobTypeSyncAccessGraph JobType = "sync_access_graph"
 )
 
-// JobExecution tracks job execution history
 type JobExecution struct {
-	ID        string        `json:"id" db:"id"`
-	JobID     string        `json:"job_id" db:"job_id"`
+	ID        string          `json:"id" db:"id"`
+	JobID     string          `json:"job_id" db:"job_id"`
 	Status    ExecutionStatus `json:"status" db:"status"`
-	StartedAt time.Time     `json:"started_at" db:"started_at"`
-	EndedAt   *time.Time    `json:"ended_at,omitempty" db:"ended_at"`
-	Error     string        `json:"error,omitempty" db:"error"`
-	Output    string        `json:"output,omitempty" db:"output"`
+	StartedAt time.Time       `json:"started_at" db:"started_at"`
+	EndedAt   *time.Time      `json:"ended_at,omitempty" db:"ended_at"`
+	Error     string          `json:"error,omitempty" db:"error"`
+	Output    string          `json:"output,omitempty" db:"output"`
 }
 
-// ExecutionStatus represents job execution status
 type ExecutionStatus string
 
 const (
@@ -57,10 +53,8 @@ const (
 	StatusFailed    ExecutionStatus = "failed"
 )
 
-// JobHandler is a function that executes a job
 type JobHandler func(ctx context.Context, job *Job) error
 
-// Store defines the interface for job persistence
 type Store interface {
 	GetJob(ctx context.Context, id string) (*Job, error)
 	ListJobs(ctx context.Context) ([]*Job, error)
@@ -73,7 +67,6 @@ type Store interface {
 	GetJobExecutions(ctx context.Context, jobID string, limit int) ([]*JobExecution, error)
 }
 
-// Scheduler manages scheduled jobs
 type Scheduler struct {
 	cron     *cron.Cron
 	store    Store
@@ -83,7 +76,6 @@ type Scheduler struct {
 	logger   *slog.Logger
 }
 
-// NewScheduler creates a new scheduler
 func NewScheduler(store Store, logger *slog.Logger) *Scheduler {
 	if logger == nil {
 		logger = slog.Default()
@@ -100,22 +92,18 @@ func NewScheduler(store Store, logger *slog.Logger) *Scheduler {
 	}
 }
 
-// RegisterHandler registers a handler for a job type
 func (s *Scheduler) RegisterHandler(jobType JobType, handler JobHandler) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.handlers[jobType] = handler
 }
 
-// Start starts the scheduler
 func (s *Scheduler) Start(ctx context.Context) error {
-	// Load all jobs from store
 	jobs, err := s.store.ListJobs(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to load jobs: %w", err)
 	}
 
-	// Schedule all enabled jobs
 	for _, job := range jobs {
 		if job.Enabled {
 			if err := s.scheduleJob(job); err != nil {
@@ -133,12 +121,10 @@ func (s *Scheduler) Start(ctx context.Context) error {
 	return nil
 }
 
-// Stop stops the scheduler
 func (s *Scheduler) Stop() context.Context {
 	return s.cron.Stop()
 }
 
-// AddJob adds a new job
 func (s *Scheduler) AddJob(ctx context.Context, job *Job) error {
 	if err := s.store.CreateJob(ctx, job); err != nil {
 		return err
@@ -151,9 +137,7 @@ func (s *Scheduler) AddJob(ctx context.Context, job *Job) error {
 	return nil
 }
 
-// UpdateJob updates a job
 func (s *Scheduler) UpdateJob(ctx context.Context, job *Job) error {
-	// Remove existing schedule
 	s.unscheduleJob(job.ID)
 
 	if err := s.store.UpdateJob(ctx, job); err != nil {
@@ -167,13 +151,11 @@ func (s *Scheduler) UpdateJob(ctx context.Context, job *Job) error {
 	return nil
 }
 
-// DeleteJob deletes a job
 func (s *Scheduler) DeleteJob(ctx context.Context, id string) error {
 	s.unscheduleJob(id)
 	return s.store.DeleteJob(ctx, id)
 }
 
-// EnableJob enables a job
 func (s *Scheduler) EnableJob(ctx context.Context, id string) error {
 	job, err := s.store.GetJob(ctx, id)
 	if err != nil {
@@ -188,7 +170,6 @@ func (s *Scheduler) EnableJob(ctx context.Context, id string) error {
 	return s.scheduleJob(job)
 }
 
-// DisableJob disables a job
 func (s *Scheduler) DisableJob(ctx context.Context, id string) error {
 	job, err := s.store.GetJob(ctx, id)
 	if err != nil {
@@ -201,7 +182,6 @@ func (s *Scheduler) DisableJob(ctx context.Context, id string) error {
 	return s.store.UpdateJob(ctx, job)
 }
 
-// RunJobNow runs a job immediately
 func (s *Scheduler) RunJobNow(ctx context.Context, id string) error {
 	job, err := s.store.GetJob(ctx, id)
 	if err != nil {
@@ -212,7 +192,6 @@ func (s *Scheduler) RunJobNow(ctx context.Context, id string) error {
 	return nil
 }
 
-// GetNextRuns returns the next N runs for a job
 func (s *Scheduler) GetNextRuns(id string, count int) []time.Time {
 	s.mu.RLock()
 	entryID, ok := s.entries[id]
@@ -237,18 +216,15 @@ func (s *Scheduler) GetNextRuns(id string, count int) []time.Time {
 	return runs
 }
 
-// scheduleJob adds a job to the cron scheduler
 func (s *Scheduler) scheduleJob(job *Job) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Remove existing entry if present
 	if entryID, ok := s.entries[job.ID]; ok {
 		s.cron.Remove(entryID)
 		delete(s.entries, job.ID)
 	}
 
-	// Add new entry
 	entryID, err := s.cron.AddFunc(job.Schedule, func() {
 		s.executeJob(job)
 	})
@@ -258,7 +234,6 @@ func (s *Scheduler) scheduleJob(job *Job) error {
 
 	s.entries[job.ID] = entryID
 
-	// Update next run time
 	entry := s.cron.Entry(entryID)
 	nextRun := entry.Next
 	job.NextRun = &nextRun
@@ -272,7 +247,6 @@ func (s *Scheduler) scheduleJob(job *Job) error {
 	return nil
 }
 
-// unscheduleJob removes a job from the cron scheduler
 func (s *Scheduler) unscheduleJob(id string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -283,12 +257,10 @@ func (s *Scheduler) unscheduleJob(id string) {
 	}
 }
 
-// executeJob executes a job
 func (s *Scheduler) executeJob(job *Job) {
 	ctx := context.Background()
 	startTime := time.Now()
 
-	// Create execution record
 	exec := &JobExecution{
 		ID:        fmt.Sprintf("exec-%d", startTime.UnixNano()),
 		JobID:     job.ID,
@@ -305,7 +277,6 @@ func (s *Scheduler) executeJob(job *Job) {
 		"job_name", job.Name,
 		"execution_id", exec.ID)
 
-	// Get handler
 	s.mu.RLock()
 	handler, ok := s.handlers[job.JobType]
 	s.mu.RUnlock()
@@ -319,7 +290,6 @@ func (s *Scheduler) executeJob(job *Job) {
 		return
 	}
 
-	// Execute handler
 	err := handler(ctx, job)
 	endTime := time.Now()
 	exec.EndedAt = &endTime
@@ -344,16 +314,14 @@ func (s *Scheduler) executeJob(job *Job) {
 	_ = s.store.UpdateLastRun(ctx, job.ID, startTime)
 }
 
-// DefaultHandlers returns common job handlers
 type DefaultHandlers struct {
-	ScanFunc        func(ctx context.Context, accountID string) error
-	ScanAllFunc     func(ctx context.Context) error
-	CleanupFunc     func(ctx context.Context, olderThan time.Duration) error
-	ReportFunc      func(ctx context.Context, config map[string]string) error
-	SyncAccessFunc  func(ctx context.Context) error
+	ScanFunc       func(ctx context.Context, accountID string) error
+	ScanAllFunc    func(ctx context.Context) error
+	CleanupFunc    func(ctx context.Context, olderThan time.Duration) error
+	ReportFunc     func(ctx context.Context, config map[string]string) error
+	SyncAccessFunc func(ctx context.Context) error
 }
 
-// Register registers default handlers with the scheduler
 func (h *DefaultHandlers) Register(s *Scheduler) {
 	if h.ScanFunc != nil {
 		s.RegisterHandler(JobTypeScanAccount, func(ctx context.Context, job *Job) error {

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 
-	"cloud.google.com/go/iam"
 	"cloud.google.com/go/storage"
 	"google.golang.org/api/cloudfunctions/v1"
 	"google.golang.org/api/cloudresourcemanager/v1"
@@ -17,24 +16,20 @@ import (
 	"github.com/qualys/dspm/internal/models"
 )
 
-// Connector implements the GCP cloud connector
 type Connector struct {
 	projectID       string
 	credentialsFile string
 
-	// Service clients
 	storageClient   *storage.Client
 	crmClient       *cloudresourcemanager.Service
 	functionsClient *cloudfunctions.Service
 }
 
-// Config holds GCP connector configuration
 type Config struct {
 	ProjectID       string
 	CredentialsFile string
 }
 
-// New creates a new GCP connector
 func New(ctx context.Context, cfg Config) (*Connector, error) {
 	var opts []option.ClientOption
 	if cfg.CredentialsFile != "" {
@@ -65,26 +60,21 @@ func New(ctx context.Context, cfg Config) (*Connector, error) {
 	}, nil
 }
 
-// Provider returns the cloud provider type
 func (c *Connector) Provider() models.Provider {
 	return models.ProviderGCP
 }
 
-// ProjectID returns the GCP project ID
 func (c *Connector) ProjectID() string {
 	return c.projectID
 }
 
-// Validate tests the connection and permissions
 func (c *Connector) Validate(ctx context.Context) error {
-	// Test storage access
 	it := c.storageClient.Buckets(ctx, c.projectID)
 	_, err := it.Next()
 	if err != nil && err != iterator.Done {
 		return fmt.Errorf("validating storage access: %w", err)
 	}
 
-	// Test resource manager access
 	_, err = c.crmClient.Projects.Get(c.projectID).Context(ctx).Do()
 	if err != nil {
 		return fmt.Errorf("validating resource manager access: %w", err)
@@ -93,7 +83,6 @@ func (c *Connector) Validate(ctx context.Context) error {
 	return nil
 }
 
-// Close releases any resources
 func (c *Connector) Close() error {
 	if c.storageClient != nil {
 		return c.storageClient.Close()
@@ -101,9 +90,6 @@ func (c *Connector) Close() error {
 	return nil
 }
 
-// --- Storage Operations ---
-
-// ListBuckets returns all GCS buckets
 func (c *Connector) ListBuckets(ctx context.Context) ([]connectors.BucketInfo, error) {
 	var buckets []connectors.BucketInfo
 
@@ -128,7 +114,6 @@ func (c *Connector) ListBuckets(ctx context.Context) ([]connectors.BucketInfo, e
 	return buckets, nil
 }
 
-// GetBucketMetadata returns detailed metadata for a bucket
 func (c *Connector) GetBucketMetadata(ctx context.Context, bucketName string) (*connectors.BucketMetadata, error) {
 	bucket := c.storageClient.Bucket(bucketName)
 	attrs, err := bucket.Attrs(ctx)
@@ -143,29 +128,23 @@ func (c *Connector) GetBucketMetadata(ctx context.Context, bucketName string) (*
 		CreatedAt: attrs.Created.String(),
 	}
 
-	// Check encryption
 	if attrs.Encryption != nil && attrs.Encryption.DefaultKMSKeyName != "" {
 		metadata.Encryption.Enabled = true
 		metadata.Encryption.Type = models.EncryptionCMK
 		metadata.Encryption.KeyARN = attrs.Encryption.DefaultKMSKeyName
 	} else {
-		// GCS always encrypts at rest by default
 		metadata.Encryption.Enabled = true
 		metadata.Encryption.Type = models.EncryptionSSE
 	}
 
-	// Check versioning
 	metadata.Versioning = attrs.VersioningEnabled
 
-	// Check logging
 	if attrs.Logging != nil && attrs.Logging.LogBucket != "" {
 		metadata.Logging.Enabled = true
 		metadata.Logging.TargetBucket = attrs.Logging.LogBucket
 		metadata.Logging.TargetPrefix = attrs.Logging.LogObjectPrefix
 	}
 
-	// Check public access
-	// Check IAM policy for allUsers or allAuthenticatedUsers
 	policy, err := bucket.IAM().Policy(ctx)
 	if err == nil {
 		for _, members := range policy.InternalProto.GetBindings() {
@@ -178,12 +157,10 @@ func (c *Connector) GetBucketMetadata(ctx context.Context, bucketName string) (*
 		}
 	}
 
-	// Check uniform bucket-level access
 	if attrs.UniformBucketLevelAccess.Enabled {
 		metadata.PublicAccessBlock.BlockPublicAcls = true
 	}
 
-	// Get labels as tags
 	metadata.Tags = make(map[string]string)
 	for k, v := range attrs.Labels {
 		metadata.Tags[k] = v
@@ -192,7 +169,6 @@ func (c *Connector) GetBucketMetadata(ctx context.Context, bucketName string) (*
 	return metadata, nil
 }
 
-// ListObjects lists objects in a bucket
 func (c *Connector) ListObjects(ctx context.Context, bucketName, prefix string, maxKeys int) ([]connectors.ObjectInfo, error) {
 	var objects []connectors.ObjectInfo
 
@@ -223,7 +199,6 @@ func (c *Connector) ListObjects(ctx context.Context, bucketName, prefix string, 
 	return objects, nil
 }
 
-// GetObject retrieves an object's content
 func (c *Connector) GetObject(ctx context.Context, bucketName, objectKey string, byteRange *connectors.ByteRange) (io.ReadCloser, error) {
 	bucket := c.storageClient.Bucket(bucketName)
 	obj := bucket.Object(objectKey)
@@ -244,7 +219,6 @@ func (c *Connector) GetObject(ctx context.Context, bucketName, objectKey string,
 	return reader, nil
 }
 
-// GetBucketPolicy returns the bucket IAM policy
 func (c *Connector) GetBucketPolicy(ctx context.Context, bucketName string) (*connectors.BucketPolicy, error) {
 	bucket := c.storageClient.Bucket(bucketName)
 	policy, err := bucket.IAM().Policy(ctx)
@@ -254,7 +228,6 @@ func (c *Connector) GetBucketPolicy(ctx context.Context, bucketName string) (*co
 
 	result := &connectors.BucketPolicy{}
 
-	// Check for public access
 	for _, binding := range policy.InternalProto.GetBindings() {
 		for _, member := range binding.Members {
 			if member == "allUsers" || member == "allAuthenticatedUsers" {
@@ -264,14 +237,12 @@ func (c *Connector) GetBucketPolicy(ctx context.Context, bucketName string) (*co
 		}
 	}
 
-	// Store raw policy
 	policyBytes, _ := json.Marshal(policy)
 	result.Policy = string(policyBytes)
 
 	return result, nil
 }
 
-// GetBucketACL returns the bucket ACL
 func (c *Connector) GetBucketACL(ctx context.Context, bucketName string) (*connectors.BucketACL, error) {
 	bucket := c.storageClient.Bucket(bucketName)
 	acl, err := bucket.ACL().List(ctx)
@@ -287,7 +258,6 @@ func (c *Connector) GetBucketACL(ctx context.Context, bucketName string) (*conne
 			Permission: string(rule.Role),
 		}
 
-		// Check for public access
 		if rule.Entity == storage.AllUsers || rule.Entity == storage.AllAuthenticatedUsers {
 			grant.IsPublic = true
 		}
@@ -298,9 +268,6 @@ func (c *Connector) GetBucketACL(ctx context.Context, bucketName string) (*conne
 	return result, nil
 }
 
-// --- IAM Operations ---
-
-// ListUsers returns all users with IAM bindings
 func (c *Connector) ListUsers(ctx context.Context) ([]connectors.Principal, error) {
 	var principals []connectors.Principal
 
@@ -322,7 +289,6 @@ func (c *Connector) ListUsers(ctx context.Context) ([]connectors.Principal, erro
 				Name: member,
 			}
 
-			// Determine type from member format
 			switch {
 			case len(member) > 5 && member[:5] == "user:":
 				principal.Type = "USER"
@@ -344,7 +310,6 @@ func (c *Connector) ListUsers(ctx context.Context) ([]connectors.Principal, erro
 	return principals, nil
 }
 
-// ListRoles returns all IAM roles
 func (c *Connector) ListRoles(ctx context.Context) ([]connectors.Principal, error) {
 	var roles []connectors.Principal
 
@@ -370,7 +335,6 @@ func (c *Connector) ListRoles(ctx context.Context) ([]connectors.Principal, erro
 	return roles, nil
 }
 
-// ListPolicies returns IAM policies (role bindings)
 func (c *Connector) ListPolicies(ctx context.Context) ([]connectors.PolicyInfo, error) {
 	var policies []connectors.PolicyInfo
 
@@ -392,7 +356,6 @@ func (c *Connector) ListPolicies(ctx context.Context) ([]connectors.PolicyInfo, 
 	return policies, nil
 }
 
-// GetPolicy returns the project IAM policy
 func (c *Connector) GetPolicy(ctx context.Context, policyARN string) (*connectors.PolicyDocument, error) {
 	policy, err := c.crmClient.Projects.GetIamPolicy(c.projectID, &cloudresourcemanager.GetIamPolicyRequest{}).Context(ctx).Do()
 	if err != nil {
@@ -427,7 +390,6 @@ func (c *Connector) GetPolicy(ctx context.Context, policyARN string) (*connector
 	return doc, nil
 }
 
-// ListAttachedPolicies returns roles attached to a principal
 func (c *Connector) ListAttachedPolicies(ctx context.Context, principalARN string) ([]connectors.PolicyInfo, error) {
 	var policies []connectors.PolicyInfo
 
@@ -452,7 +414,6 @@ func (c *Connector) ListAttachedPolicies(ctx context.Context, principalARN strin
 	return policies, nil
 }
 
-// GetServiceAccounts returns all service accounts
 func (c *Connector) GetServiceAccounts(ctx context.Context) ([]connectors.Principal, error) {
 	var principals []connectors.Principal
 
@@ -482,9 +443,6 @@ func (c *Connector) GetServiceAccounts(ctx context.Context) ([]connectors.Princi
 	return principals, nil
 }
 
-// --- Serverless Operations ---
-
-// ListFunctions returns all Cloud Functions
 func (c *Connector) ListFunctions(ctx context.Context) ([]connectors.FunctionInfo, error) {
 	var functions []connectors.FunctionInfo
 
@@ -506,12 +464,9 @@ func (c *Connector) ListFunctions(ctx context.Context) ([]connectors.FunctionInf
 			info.MemorySize = int(fn.AvailableMemoryMb)
 		}
 		if fn.Timeout != "" {
-			// Parse duration string
 			info.Timeout = 60 // Default
 		}
 
-		// Extract region from name
-		// Format: projects/{project}/locations/{location}/functions/{name}
 		parts := splitFunctionName(fn.Name)
 		if len(parts) >= 4 {
 			info.Region = parts[3]
@@ -527,7 +482,6 @@ func (c *Connector) ListFunctions(ctx context.Context) ([]connectors.FunctionInf
 	return functions, nil
 }
 
-// GetFunctionConfig returns configuration for a function
 func (c *Connector) GetFunctionConfig(ctx context.Context, functionName string) (*connectors.FunctionConfig, error) {
 	fn, err := c.functionsClient.Projects.Locations.Functions.Get(functionName).Context(ctx).Do()
 	if err != nil {
@@ -567,7 +521,6 @@ func (c *Connector) GetFunctionConfig(ctx context.Context, functionName string) 
 	return config, nil
 }
 
-// GetFunctionPolicy returns the IAM policy for a function
 func (c *Connector) GetFunctionPolicy(ctx context.Context, functionName string) (*connectors.PolicyDocument, error) {
 	policy, err := c.functionsClient.Projects.Locations.Functions.GetIamPolicy(functionName).Context(ctx).Do()
 	if err != nil {
@@ -592,8 +545,6 @@ func (c *Connector) GetFunctionPolicy(ctx context.Context, functionName string) 
 
 	return doc, nil
 }
-
-// Helper functions
 
 func extractFunctionName(fullName string) string {
 	parts := splitFunctionName(fullName)
@@ -622,7 +573,6 @@ func splitFunctionName(fullName string) []string {
 	return parts
 }
 
-// Compile-time interface checks
 var (
 	_ connectors.StorageConnector    = (*Connector)(nil)
 	_ connectors.IAMConnector        = (*Connector)(nil)

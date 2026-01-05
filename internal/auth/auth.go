@@ -21,7 +21,6 @@ var (
 	ErrUnauthorized       = errors.New("unauthorized")
 )
 
-// User represents an authenticated user
 type User struct {
 	ID        string    `json:"id" db:"id"`
 	Email     string    `json:"email" db:"email"`
@@ -32,7 +31,6 @@ type User struct {
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
 }
 
-// Role defines user permission levels
 type Role string
 
 const (
@@ -41,7 +39,6 @@ const (
 	RoleViewer Role = "viewer"
 )
 
-// Claims represents JWT claims
 type Claims struct {
 	UserID string `json:"user_id"`
 	Email  string `json:"email"`
@@ -49,7 +46,6 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-// TokenPair contains access and refresh tokens
 type TokenPair struct {
 	AccessToken  string    `json:"access_token"`
 	RefreshToken string    `json:"refresh_token"`
@@ -57,7 +53,6 @@ type TokenPair struct {
 	TokenType    string    `json:"token_type"`
 }
 
-// Config holds authentication configuration
 type Config struct {
 	JWTSecret          string
 	AccessTokenExpiry  time.Duration
@@ -65,13 +60,11 @@ type Config struct {
 	Issuer             string
 }
 
-// Service handles authentication operations
 type Service struct {
 	config Config
 	store  UserStore
 }
 
-// UserStore defines the interface for user persistence
 type UserStore interface {
 	GetUserByID(ctx context.Context, id string) (*User, error)
 	GetUserByEmail(ctx context.Context, email string) (*User, error)
@@ -85,7 +78,6 @@ type UserStore interface {
 	RevokeAllRefreshTokens(ctx context.Context, userID string) error
 }
 
-// NewService creates a new authentication service
 func NewService(config Config, store UserStore) *Service {
 	if config.AccessTokenExpiry == 0 {
 		config.AccessTokenExpiry = 15 * time.Minute
@@ -103,7 +95,6 @@ func NewService(config Config, store UserStore) *Service {
 	}
 }
 
-// HashPassword creates a bcrypt hash of the password
 func HashPassword(password string) (string, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
@@ -112,13 +103,11 @@ func HashPassword(password string) (string, error) {
 	return string(hash), nil
 }
 
-// CheckPassword compares a password with a hash
 func CheckPassword(password, hash string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
 	return err == nil
 }
 
-// Login authenticates a user and returns tokens
 func (s *Service) Login(ctx context.Context, email, password string) (*TokenPair, error) {
 	user, err := s.store.GetUserByEmail(ctx, email)
 	if err != nil {
@@ -132,7 +121,6 @@ func (s *Service) Login(ctx context.Context, email, password string) (*TokenPair
 	return s.generateTokenPair(ctx, user)
 }
 
-// RefreshTokens generates new tokens using a refresh token
 func (s *Service) RefreshTokens(ctx context.Context, refreshToken string) (*TokenPair, error) {
 	claims, err := s.ValidateToken(refreshToken)
 	if err != nil {
@@ -149,23 +137,19 @@ func (s *Service) RefreshTokens(ctx context.Context, refreshToken string) (*Toke
 		return nil, ErrInvalidCredentials
 	}
 
-	// Revoke old refresh token
 	_ = s.store.RevokeRefreshToken(ctx, claims.UserID, refreshToken)
 
 	return s.generateTokenPair(ctx, user)
 }
 
-// Logout revokes the refresh token
 func (s *Service) Logout(ctx context.Context, userID, refreshToken string) error {
 	return s.store.RevokeRefreshToken(ctx, userID, refreshToken)
 }
 
-// LogoutAll revokes all refresh tokens for a user
 func (s *Service) LogoutAll(ctx context.Context, userID string) error {
 	return s.store.RevokeAllRefreshTokens(ctx, userID)
 }
 
-// ValidateToken validates a JWT and returns claims
 func (s *Service) ValidateToken(tokenString string) (*Claims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -189,13 +173,11 @@ func (s *Service) ValidateToken(tokenString string) (*Claims, error) {
 	return claims, nil
 }
 
-// generateTokenPair creates access and refresh tokens
 func (s *Service) generateTokenPair(ctx context.Context, user *User) (*TokenPair, error) {
 	now := time.Now()
 	accessExpiry := now.Add(s.config.AccessTokenExpiry)
 	refreshExpiry := now.Add(s.config.RefreshTokenExpiry)
 
-	// Access token
 	accessClaims := &Claims{
 		UserID: user.ID,
 		Email:  user.Email,
@@ -214,7 +196,6 @@ func (s *Service) generateTokenPair(ctx context.Context, user *User) (*TokenPair
 		return nil, fmt.Errorf("failed to sign access token: %w", err)
 	}
 
-	// Refresh token
 	refreshClaims := &Claims{
 		UserID: user.ID,
 		Email:  user.Email,
@@ -233,7 +214,6 @@ func (s *Service) generateTokenPair(ctx context.Context, user *User) (*TokenPair
 		return nil, fmt.Errorf("failed to sign refresh token: %w", err)
 	}
 
-	// Store refresh token
 	if err := s.store.StoreRefreshToken(ctx, user.ID, refreshTokenString, refreshExpiry); err != nil {
 		return nil, fmt.Errorf("failed to store refresh token: %w", err)
 	}
@@ -246,7 +226,6 @@ func (s *Service) generateTokenPair(ctx context.Context, user *User) (*TokenPair
 	}, nil
 }
 
-// GenerateAPIKey generates a random API key
 func GenerateAPIKey() (string, error) {
 	bytes := make([]byte, 32)
 	if _, err := rand.Read(bytes); err != nil {
@@ -255,18 +234,15 @@ func GenerateAPIKey() (string, error) {
 	return base64.URLEncoding.EncodeToString(bytes), nil
 }
 
-// Context key for user
 type contextKey string
 
 const UserContextKey contextKey = "user"
 
-// GetUserFromContext extracts user from context
 func GetUserFromContext(ctx context.Context) (*Claims, bool) {
 	claims, ok := ctx.Value(UserContextKey).(*Claims)
 	return claims, ok
 }
 
-// Middleware creates JWT authentication middleware
 func (s *Service) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
@@ -296,7 +272,6 @@ func (s *Service) Middleware(next http.Handler) http.Handler {
 	})
 }
 
-// RequireRole creates middleware that requires a specific role
 func RequireRole(roles ...Role) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -318,7 +293,6 @@ func RequireRole(roles ...Role) func(http.Handler) http.Handler {
 	}
 }
 
-// OptionalAuth creates middleware that validates token if present but doesn't require it
 func (s *Service) OptionalAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")

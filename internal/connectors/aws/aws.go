@@ -19,20 +19,17 @@ import (
 	"github.com/qualys/dspm/internal/models"
 )
 
-// Connector implements the AWS cloud connector
 type Connector struct {
 	cfg       aws.Config
 	accountID string
 	region    string
 
-	// Service clients
 	s3Client     *s3.Client
 	iamClient    *iam.Client
 	lambdaClient *lambda.Client
 	kmsClient    *kms.Client
 }
 
-// Config holds AWS connector configuration
 type Config struct {
 	Region          string
 	AssumeRoleARN   string
@@ -41,9 +38,7 @@ type Config struct {
 	SecretAccessKey string
 }
 
-// New creates a new AWS connector
 func New(ctx context.Context, cfg Config) (*Connector, error) {
-	// Load default AWS config
 	awsCfg, err := config.LoadDefaultConfig(ctx,
 		config.WithRegion(cfg.Region),
 	)
@@ -51,7 +46,6 @@ func New(ctx context.Context, cfg Config) (*Connector, error) {
 		return nil, fmt.Errorf("loading AWS config: %w", err)
 	}
 
-	// If assume role is specified, create STS credentials provider
 	if cfg.AssumeRoleARN != "" {
 		stsClient := sts.NewFromConfig(awsCfg)
 		creds := stscreds.NewAssumeRoleProvider(stsClient, cfg.AssumeRoleARN, func(o *stscreds.AssumeRoleOptions) {
@@ -62,7 +56,6 @@ func New(ctx context.Context, cfg Config) (*Connector, error) {
 		awsCfg.Credentials = aws.NewCredentialsCache(creds)
 	}
 
-	// Get account ID
 	stsClient := sts.NewFromConfig(awsCfg)
 	identity, err := stsClient.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
 	if err != nil {
@@ -80,25 +73,20 @@ func New(ctx context.Context, cfg Config) (*Connector, error) {
 	}, nil
 }
 
-// Provider returns the cloud provider type
 func (c *Connector) Provider() models.Provider {
 	return models.ProviderAWS
 }
 
-// AccountID returns the AWS account ID
 func (c *Connector) AccountID() string {
 	return c.accountID
 }
 
-// Validate tests the connection and permissions
 func (c *Connector) Validate(ctx context.Context) error {
-	// Test S3 access
 	_, err := c.s3Client.ListBuckets(ctx, &s3.ListBucketsInput{})
 	if err != nil {
 		return fmt.Errorf("validating S3 access: %w", err)
 	}
 
-	// Test IAM access
 	_, err = c.iamClient.ListRoles(ctx, &iam.ListRolesInput{MaxItems: aws.Int32(1)})
 	if err != nil {
 		return fmt.Errorf("validating IAM access: %w", err)
@@ -107,12 +95,10 @@ func (c *Connector) Validate(ctx context.Context) error {
 	return nil
 }
 
-// Close releases any resources
 func (c *Connector) Close() error {
 	return nil
 }
 
-// S3Client returns the S3 client for a specific region
 func (c *Connector) S3ClientForRegion(region string) *s3.Client {
 	if region == c.region || region == "" {
 		return c.s3Client
@@ -122,9 +108,6 @@ func (c *Connector) S3ClientForRegion(region string) *s3.Client {
 	})
 }
 
-// --- Storage Operations ---
-
-// ListBuckets returns all S3 buckets
 func (c *Connector) ListBuckets(ctx context.Context) ([]connectors.BucketInfo, error) {
 	output, err := c.s3Client.ListBuckets(ctx, &s3.ListBucketsInput{})
 	if err != nil {
@@ -133,7 +116,6 @@ func (c *Connector) ListBuckets(ctx context.Context) ([]connectors.BucketInfo, e
 
 	buckets := make([]connectors.BucketInfo, 0, len(output.Buckets))
 	for _, b := range output.Buckets {
-		// Get bucket location
 		locOutput, err := c.s3Client.GetBucketLocation(ctx, &s3.GetBucketLocationInput{
 			Bucket: b.Name,
 		})
@@ -154,9 +136,7 @@ func (c *Connector) ListBuckets(ctx context.Context) ([]connectors.BucketInfo, e
 	return buckets, nil
 }
 
-// GetBucketMetadata returns detailed metadata for a bucket
 func (c *Connector) GetBucketMetadata(ctx context.Context, bucketName string) (*connectors.BucketMetadata, error) {
-	// Get bucket location first
 	locOutput, _ := c.s3Client.GetBucketLocation(ctx, &s3.GetBucketLocationInput{
 		Bucket: aws.String(bucketName),
 	})
@@ -166,7 +146,6 @@ func (c *Connector) GetBucketMetadata(ctx context.Context, bucketName string) (*
 		region = string(locOutput.LocationConstraint)
 	}
 
-	// Use region-specific client
 	client := c.S3ClientForRegion(region)
 
 	metadata := &connectors.BucketMetadata{
@@ -175,7 +154,6 @@ func (c *Connector) GetBucketMetadata(ctx context.Context, bucketName string) (*
 		ARN:    fmt.Sprintf("arn:aws:s3:::%s", bucketName),
 	}
 
-	// Get encryption
 	encOutput, err := client.GetBucketEncryption(ctx, &s3.GetBucketEncryptionInput{
 		Bucket: aws.String(bucketName),
 	})
@@ -194,7 +172,6 @@ func (c *Connector) GetBucketMetadata(ctx context.Context, bucketName string) (*
 		}
 	}
 
-	// Get versioning
 	verOutput, err := client.GetBucketVersioning(ctx, &s3.GetBucketVersioningInput{
 		Bucket: aws.String(bucketName),
 	})
@@ -202,7 +179,6 @@ func (c *Connector) GetBucketMetadata(ctx context.Context, bucketName string) (*
 		metadata.Versioning = verOutput.Status == "Enabled"
 	}
 
-	// Get logging
 	logOutput, err := client.GetBucketLogging(ctx, &s3.GetBucketLoggingInput{
 		Bucket: aws.String(bucketName),
 	})
@@ -212,7 +188,6 @@ func (c *Connector) GetBucketMetadata(ctx context.Context, bucketName string) (*
 		metadata.Logging.TargetPrefix = aws.ToString(logOutput.LoggingEnabled.TargetPrefix)
 	}
 
-	// Get public access block
 	pabOutput, err := client.GetPublicAccessBlock(ctx, &s3.GetPublicAccessBlockInput{
 		Bucket: aws.String(bucketName),
 	})
@@ -226,7 +201,6 @@ func (c *Connector) GetBucketMetadata(ctx context.Context, bucketName string) (*
 		}
 	}
 
-	// Get tags
 	tagOutput, err := client.GetBucketTagging(ctx, &s3.GetBucketTaggingInput{
 		Bucket: aws.String(bucketName),
 	})
@@ -240,9 +214,7 @@ func (c *Connector) GetBucketMetadata(ctx context.Context, bucketName string) (*
 	return metadata, nil
 }
 
-// ListObjects lists objects in a bucket
 func (c *Connector) ListObjects(ctx context.Context, bucketName, prefix string, maxKeys int) ([]connectors.ObjectInfo, error) {
-	// Get bucket region
 	locOutput, _ := c.s3Client.GetBucketLocation(ctx, &s3.GetBucketLocationInput{
 		Bucket: aws.String(bucketName),
 	})
@@ -284,9 +256,7 @@ func (c *Connector) ListObjects(ctx context.Context, bucketName, prefix string, 
 	return objects, nil
 }
 
-// GetObject retrieves an object's content
 func (c *Connector) GetObject(ctx context.Context, bucketName, objectKey string, byteRange *connectors.ByteRange) (io.ReadCloser, error) {
-	// Get bucket region
 	locOutput, _ := c.s3Client.GetBucketLocation(ctx, &s3.GetBucketLocationInput{
 		Bucket: aws.String(bucketName),
 	})
@@ -315,7 +285,6 @@ func (c *Connector) GetObject(ctx context.Context, bucketName, objectKey string,
 	return output.Body, nil
 }
 
-// GetBucketPolicy returns the bucket policy
 func (c *Connector) GetBucketPolicy(ctx context.Context, bucketName string) (*connectors.BucketPolicy, error) {
 	output, err := c.s3Client.GetBucketPolicy(ctx, &s3.GetBucketPolicyInput{
 		Bucket: aws.String(bucketName),
@@ -328,11 +297,9 @@ func (c *Connector) GetBucketPolicy(ctx context.Context, bucketName string) (*co
 		Policy: aws.ToString(output.Policy),
 	}
 
-	// Parse policy document
 	var doc connectors.PolicyDocument
 	if err := json.Unmarshal([]byte(policy.Policy), &doc); err == nil {
 		policy.PolicyDocument = &doc
-		// Check for public access
 		for _, stmt := range doc.Statements {
 			for _, principal := range stmt.Principals {
 				if principal == "*" && stmt.Effect == "Allow" {
@@ -346,7 +313,6 @@ func (c *Connector) GetBucketPolicy(ctx context.Context, bucketName string) (*co
 	return policy, nil
 }
 
-// GetBucketACL returns the bucket ACL
 func (c *Connector) GetBucketACL(ctx context.Context, bucketName string) (*connectors.BucketACL, error) {
 	output, err := c.s3Client.GetBucketAcl(ctx, &s3.GetBucketAclInput{
 		Bucket: aws.String(bucketName),
@@ -368,7 +334,6 @@ func (c *Connector) GetBucketACL(ctx context.Context, bucketName string) (*conne
 			g.GranteeType = string(grant.Grantee.Type)
 			if grant.Grantee.URI != nil {
 				g.Grantee = aws.ToString(grant.Grantee.URI)
-				// Check for public access grants
 				if *grant.Grantee.URI == "http://acs.amazonaws.com/groups/global/AllUsers" ||
 					*grant.Grantee.URI == "http://acs.amazonaws.com/groups/global/AuthenticatedUsers" {
 					g.IsPublic = true
@@ -384,9 +349,6 @@ func (c *Connector) GetBucketACL(ctx context.Context, bucketName string) (*conne
 	return acl, nil
 }
 
-// --- IAM Operations ---
-
-// ListUsers returns all IAM users
 func (c *Connector) ListUsers(ctx context.Context) ([]connectors.Principal, error) {
 	var users []connectors.Principal
 	paginator := iam.NewListUsersPaginator(c.iamClient, &iam.ListUsersInput{})
@@ -410,7 +372,6 @@ func (c *Connector) ListUsers(ctx context.Context) ([]connectors.Principal, erro
 	return users, nil
 }
 
-// ListRoles returns all IAM roles
 func (c *Connector) ListRoles(ctx context.Context) ([]connectors.Principal, error) {
 	var roles []connectors.Principal
 	paginator := iam.NewListRolesPaginator(c.iamClient, &iam.ListRolesInput{})
@@ -435,7 +396,6 @@ func (c *Connector) ListRoles(ctx context.Context) ([]connectors.Principal, erro
 	return roles, nil
 }
 
-// ListPolicies returns all IAM policies
 func (c *Connector) ListPolicies(ctx context.Context) ([]connectors.PolicyInfo, error) {
 	var policies []connectors.PolicyInfo
 	paginator := iam.NewListPoliciesPaginator(c.iamClient, &iam.ListPoliciesInput{
@@ -463,9 +423,7 @@ func (c *Connector) ListPolicies(ctx context.Context) ([]connectors.PolicyInfo, 
 	return policies, nil
 }
 
-// GetPolicy returns a specific policy document
 func (c *Connector) GetPolicy(ctx context.Context, policyARN string) (*connectors.PolicyDocument, error) {
-	// Get policy to find default version
 	policyOutput, err := c.iamClient.GetPolicy(ctx, &iam.GetPolicyInput{
 		PolicyArn: aws.String(policyARN),
 	})
@@ -473,7 +431,6 @@ func (c *Connector) GetPolicy(ctx context.Context, policyARN string) (*connector
 		return nil, fmt.Errorf("getting policy: %w", err)
 	}
 
-	// Get policy version document
 	versionOutput, err := c.iamClient.GetPolicyVersion(ctx, &iam.GetPolicyVersionInput{
 		PolicyArn: aws.String(policyARN),
 		VersionId: policyOutput.Policy.DefaultVersionId,
@@ -486,24 +443,15 @@ func (c *Connector) GetPolicy(ctx context.Context, policyARN string) (*connector
 		Raw: aws.ToString(versionOutput.PolicyVersion.Document),
 	}
 
-	// URL decode and parse
-	// Policy documents are URL-encoded
 	if err := json.Unmarshal([]byte(doc.Raw), doc); err != nil {
-		// Try URL decoding first if direct unmarshal fails
 		return doc, nil
 	}
 
 	return doc, nil
 }
 
-// ListAttachedPolicies returns policies attached to a principal
 func (c *Connector) ListAttachedPolicies(ctx context.Context, principalARN string) ([]connectors.PolicyInfo, error) {
-	// This would need to determine if it's a user or role ARN and call the appropriate API
-	// Simplified implementation for roles
 	var policies []connectors.PolicyInfo
-
-	// Extract role name from ARN
-	// ARN format: arn:aws:iam::123456789012:role/RoleName
 
 	paginator := iam.NewListAttachedRolePoliciesPaginator(c.iamClient, &iam.ListAttachedRolePoliciesInput{
 		RoleName: aws.String(principalARN), // This should be parsed from ARN
@@ -528,7 +476,6 @@ func (c *Connector) ListAttachedPolicies(ctx context.Context, principalARN strin
 	return policies, nil
 }
 
-// GetServiceAccounts returns service-linked roles
 func (c *Connector) GetServiceAccounts(ctx context.Context) ([]connectors.Principal, error) {
 	var serviceRoles []connectors.Principal
 	paginator := iam.NewListRolesPaginator(c.iamClient, &iam.ListRolesInput{
@@ -555,9 +502,6 @@ func (c *Connector) GetServiceAccounts(ctx context.Context) ([]connectors.Princi
 	return serviceRoles, nil
 }
 
-// --- Lambda Operations ---
-
-// ListFunctions returns all Lambda functions
 func (c *Connector) ListFunctions(ctx context.Context) ([]connectors.FunctionInfo, error) {
 	var functions []connectors.FunctionInfo
 	paginator := lambda.NewListFunctionsPaginator(c.lambdaClient, &lambda.ListFunctionsInput{})
@@ -584,7 +528,6 @@ func (c *Connector) ListFunctions(ctx context.Context) ([]connectors.FunctionInf
 	return functions, nil
 }
 
-// GetFunctionConfig returns configuration for a function
 func (c *Connector) GetFunctionConfig(ctx context.Context, functionName string) (*connectors.FunctionConfig, error) {
 	output, err := c.lambdaClient.GetFunction(ctx, &lambda.GetFunctionInput{
 		FunctionName: aws.String(functionName),
@@ -608,12 +551,10 @@ func (c *Connector) GetFunctionConfig(ctx context.Context, functionName string) 
 		KMSKeyARN: aws.ToString(cfg.KMSKeyArn),
 	}
 
-	// Environment variables
 	if cfg.Environment != nil {
 		fnConfig.Environment = cfg.Environment.Variables
 	}
 
-	// VPC config
 	if cfg.VpcConfig != nil {
 		fnConfig.VPCConfig = &connectors.VPCConfig{
 			SubnetIDs:        cfg.VpcConfig.SubnetIds,
@@ -622,7 +563,6 @@ func (c *Connector) GetFunctionConfig(ctx context.Context, functionName string) 
 		}
 	}
 
-	// Layers
 	for _, layer := range cfg.Layers {
 		fnConfig.Layers = append(fnConfig.Layers, aws.ToString(layer.Arn))
 	}
@@ -630,7 +570,6 @@ func (c *Connector) GetFunctionConfig(ctx context.Context, functionName string) 
 	return fnConfig, nil
 }
 
-// GetFunctionPolicy returns the resource policy for a function
 func (c *Connector) GetFunctionPolicy(ctx context.Context, functionName string) (*connectors.PolicyDocument, error) {
 	output, err := c.lambdaClient.GetPolicy(ctx, &lambda.GetPolicyInput{
 		FunctionName: aws.String(functionName),
@@ -647,9 +586,6 @@ func (c *Connector) GetFunctionPolicy(ctx context.Context, functionName string) 
 	return doc, nil
 }
 
-// --- KMS Operations ---
-
-// ListKeys returns all KMS keys
 func (c *Connector) ListKeys(ctx context.Context) ([]connectors.KeyInfo, error) {
 	var keys []connectors.KeyInfo
 	paginator := kms.NewListKeysPaginator(c.kmsClient, &kms.ListKeysInput{})
@@ -671,7 +607,6 @@ func (c *Connector) ListKeys(ctx context.Context) ([]connectors.KeyInfo, error) 
 	return keys, nil
 }
 
-// GetKeyMetadata returns metadata for a key
 func (c *Connector) GetKeyMetadata(ctx context.Context, keyID string) (*connectors.KeyMetadata, error) {
 	output, err := c.kmsClient.DescribeKey(ctx, &kms.DescribeKeyInput{
 		KeyId: aws.String(keyID),
@@ -695,7 +630,6 @@ func (c *Connector) GetKeyMetadata(ctx context.Context, keyID string) (*connecto
 		Origin:    string(km.Origin),
 	}
 
-	// Check rotation status
 	rotOutput, err := c.kmsClient.GetKeyRotationStatus(ctx, &kms.GetKeyRotationStatusInput{
 		KeyId: aws.String(keyID),
 	})
@@ -706,7 +640,6 @@ func (c *Connector) GetKeyMetadata(ctx context.Context, keyID string) (*connecto
 	return metadata, nil
 }
 
-// GetKeyPolicy returns the key policy
 func (c *Connector) GetKeyPolicy(ctx context.Context, keyID string) (*connectors.PolicyDocument, error) {
 	output, err := c.kmsClient.GetKeyPolicy(ctx, &kms.GetKeyPolicyInput{
 		KeyId:      aws.String(keyID),
