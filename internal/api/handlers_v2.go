@@ -479,7 +479,7 @@ func (s *Server) generateReport(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", report.MimeType)
 	w.Header().Set("Content-Disposition", "attachment; filename="+report.Filename)
 	w.Header().Set("Content-Length", string(rune(len(report.Data))))
-	w.Write(report.Data)
+	_, _ = w.Write(report.Data)
 }
 
 func (s *Server) getReportTypes(w http.ResponseWriter, r *http.Request) {

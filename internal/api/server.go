@@ -411,7 +411,7 @@ type apiMeta struct {
 
 func respondJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(apiResponse{
+	_ = json.NewEncoder(w).Encode(apiResponse{
 		Success: status >= 200 && status < 300,
 		Data:    data,
 	})
@@ -419,7 +419,7 @@ func respondJSON(w http.ResponseWriter, status int, data interface{}) {
 
 func respondJSONWithMeta(w http.ResponseWriter, status int, data interface{}, meta *apiMeta) {
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(apiResponse{
+	_ = json.NewEncoder(w).Encode(apiResponse{
 		Success: status >= 200 && status < 300,
 		Data:    data,
 		Meta:    meta,
@@ -428,7 +428,7 @@ func respondJSONWithMeta(w http.ResponseWriter, status int, data interface{}, me
 
 func respondError(w http.ResponseWriter, status int, code, message string) {
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(apiResponse{
+	_ = json.NewEncoder(w).Encode(apiResponse{
 		Success: false,
 		Error: &apiError{
 			Code:    code,

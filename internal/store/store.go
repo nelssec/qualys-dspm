@@ -407,6 +407,7 @@ func (s *Store) ListFindings(ctx context.Context, filters ListFindingFilters) ([
 	if filters.FindingType != nil {
 		baseQuery += fmt.Sprintf(" AND finding_type = $%d", argIdx)
 		args = append(args, *filters.FindingType)
+		_ = argIdx
 	}
 
 	var total int

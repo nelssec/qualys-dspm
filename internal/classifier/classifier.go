@@ -424,11 +424,7 @@ func ValidateSSN(ssn string) bool {
 	for i := 5; i < 9; i++ {
 		serial = serial*10 + int(clean[i]-'0')
 	}
-	if serial == 0 {
-		return false
-	}
-
-	return true
+	return serial != 0
 }
 
 func ValidateLuhn(number string) bool {

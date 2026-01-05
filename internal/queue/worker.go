@@ -111,7 +111,7 @@ func (w *Worker) heartbeatLoop() {
 		case <-w.ctx.Done():
 			return
 		case <-ticker.C:
-			w.queue.WorkerHeartbeat(w.ctx, w.id)
+			_ = w.queue.WorkerHeartbeat(w.ctx, w.id)
 		}
 	}
 }
@@ -141,10 +141,10 @@ func (w *Worker) processLoop() {
 
 			if err := w.processJob(job); err != nil {
 				log.Printf("[%s] Job %s failed: %v", w.id, job.ID, err)
-				w.queue.RequeueJob(w.ctx, job, err.Error())
+				_ = w.queue.RequeueJob(w.ctx, job, err.Error())
 			} else {
 				log.Printf("[%s] Job %s completed successfully", w.id, job.ID)
-				w.queue.CompleteJob(w.ctx, job, true)
+				_ = w.queue.CompleteJob(w.ctx, job, true)
 			}
 		}
 	}
@@ -177,7 +177,7 @@ func (w *Worker) processJob(job *Job) error {
 		WorkerID:    w.id,
 	}
 
-	w.store.UpdateScanJobStatus(w.ctx, job.ID, models.ScanStatusRunning, w.id)
+	_ = w.store.UpdateScanJobStatus(w.ctx, job.ID, models.ScanStatusRunning, w.id)
 
 	switch job.ScanType {
 	case models.ScanTypeFull, models.ScanTypeAssetDiscovery, models.ScanTypeClassification:
@@ -262,7 +262,7 @@ func (w *Worker) runStorageScan(job *Job, conn connectors.Connector, scanJob *mo
 	resultWg.Wait()
 
 	if progress != nil {
-		w.queue.UpdateProgress(w.ctx, &JobProgress{
+		_ = w.queue.UpdateProgress(w.ctx, &JobProgress{
 			JobID:                job.ID,
 			Status:               models.ScanStatusCompleted,
 			TotalAssets:          progress.TotalAssets,
@@ -273,7 +273,7 @@ func (w *Worker) runStorageScan(job *Job, conn connectors.Connector, scanJob *mo
 			FindingsFound:        progress.FindingsFound,
 		})
 
-		w.store.UpdateScanJobProgress(w.ctx, job.ID,
+		_ = w.store.UpdateScanJobProgress(w.ctx, job.ID,
 			progress.ScannedAssets, progress.FindingsFound, progress.ClassificationsFound)
 	}
 
@@ -392,7 +392,7 @@ func (w *Worker) collectResults(jobID uuid.UUID,
 						cats = append(cats, string(c))
 					}
 
-					w.store.UpdateAssetClassification(w.ctx, classification.AssetID, maxSens, cats, count)
+					_ = w.store.UpdateAssetClassification(w.ctx, classification.AssetID, maxSens, cats, count)
 				}
 			}
 

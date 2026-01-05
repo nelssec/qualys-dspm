@@ -234,7 +234,7 @@ func TestStore_Classifications(t *testing.T) {
 		ResourceARN:  "arn:aws:s3:::test-class-" + uuid.New().String()[:8],
 		Name:         "test-bucket",
 	}
-	store.UpsertAsset(ctx, asset)
+	_ = store.UpsertAsset(ctx, asset)
 
 	// Create classification
 	classification := &models.Classification{
@@ -287,8 +287,8 @@ func TestStore_Findings(t *testing.T) {
 		ExternalID:      "test-findings-" + uuid.New().String()[:8],
 		ConnectorConfig: models.JSONB{},
 	}
-	store.CreateAccount(ctx, account)
-	defer store.DeleteAccount(ctx, account.ID)
+	_ = store.CreateAccount(ctx, account)
+	defer func() { _ = store.DeleteAccount(ctx, account.ID) }()
 
 	// Create finding
 	finding := &models.Finding{
@@ -369,8 +369,8 @@ func TestStore_ScanJobs(t *testing.T) {
 		ExternalID:      "test-scans-" + uuid.New().String()[:8],
 		ConnectorConfig: models.JSONB{},
 	}
-	store.CreateAccount(ctx, account)
-	defer store.DeleteAccount(ctx, account.ID)
+	_ = store.CreateAccount(ctx, account)
+	defer func() { _ = store.DeleteAccount(ctx, account.ID) }()
 
 	// Create scan job
 	job := &models.ScanJob{

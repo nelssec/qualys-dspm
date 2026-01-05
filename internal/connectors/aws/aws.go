@@ -582,7 +582,7 @@ func (c *Connector) GetFunctionPolicy(ctx context.Context, functionName string) 
 		Raw: aws.ToString(output.Policy),
 	}
 
-	json.Unmarshal([]byte(doc.Raw), doc)
+	_ = json.Unmarshal([]byte(doc.Raw), doc)
 	return doc, nil
 }
 
@@ -653,6 +653,6 @@ func (c *Connector) GetKeyPolicy(ctx context.Context, keyID string) (*connectors
 		Raw: aws.ToString(output.Policy),
 	}
 
-	json.Unmarshal([]byte(doc.Raw), doc)
+	_ = json.Unmarshal([]byte(doc.Raw), doc)
 	return doc, nil
 }

@@ -150,7 +150,7 @@ func (q *Queue) DequeueJob(ctx context.Context, workerID string) (*Job, error) {
 		UpdatedAt: now,
 		WorkerID:  workerID,
 	}
-	q.UpdateProgress(ctx, progress)
+	_ = q.UpdateProgress(ctx, progress)
 
 	return &job, nil
 }
@@ -179,7 +179,7 @@ func (q *Queue) CompleteJob(ctx context.Context, job *Job, success bool) error {
 	progress.Status = status
 	progress.CompletedAt = &now
 	progress.UpdatedAt = now
-	q.UpdateProgress(ctx, progress)
+	_ = q.UpdateProgress(ctx, progress)
 
 	return nil
 }
@@ -213,7 +213,7 @@ func (q *Queue) RequeueJob(ctx context.Context, job *Job, errorMsg string) error
 	progress.Status = models.ScanStatusPending
 	progress.Errors = append(progress.Errors, errorMsg)
 	progress.UpdatedAt = time.Now()
-	q.UpdateProgress(ctx, progress)
+	_ = q.UpdateProgress(ctx, progress)
 
 	return nil
 }
@@ -282,7 +282,7 @@ func (q *Queue) GetActiveWorkers(ctx context.Context, timeout time.Duration) ([]
 
 	for workerID, lastSeen := range workers {
 		var ts int64
-		fmt.Sscanf(lastSeen, "%d", &ts)
+		_, _ = fmt.Sscanf(lastSeen, "%d", &ts)
 		if ts > cutoff {
 			active = append(active, workerID)
 		}
