@@ -96,16 +96,14 @@ func (s *Store) GetAccountByExternalID(ctx context.Context, provider models.Prov
 func (s *Store) ListAccounts(ctx context.Context, provider *models.Provider, status *string) ([]models.CloudAccount, error) {
 	query := `SELECT * FROM cloud_accounts WHERE 1=1`
 	args := make([]interface{}, 0)
-	argIdx := 1
 
 	if provider != nil {
-		query += fmt.Sprintf(" AND provider = $%d", argIdx)
 		args = append(args, *provider)
-		argIdx++
+		query += fmt.Sprintf(" AND provider = $%d", len(args))
 	}
 	if status != nil {
-		query += fmt.Sprintf(" AND status = $%d", argIdx)
 		args = append(args, *status)
+		query += fmt.Sprintf(" AND status = $%d", len(args))
 	}
 
 	query += " ORDER BY created_at DESC"
@@ -213,22 +211,18 @@ type ListAssetFilters struct {
 func (s *Store) ListAssets(ctx context.Context, filters ListAssetFilters) ([]models.DataAsset, int, error) {
 	baseQuery := `FROM data_assets WHERE 1=1`
 	args := make([]interface{}, 0)
-	argIdx := 1
 
 	if filters.AccountID != nil {
-		baseQuery += fmt.Sprintf(" AND account_id = $%d", argIdx)
 		args = append(args, *filters.AccountID)
-		argIdx++
+		baseQuery += fmt.Sprintf(" AND account_id = $%d", len(args))
 	}
 	if filters.ResourceType != nil {
-		baseQuery += fmt.Sprintf(" AND resource_type = $%d", argIdx)
 		args = append(args, *filters.ResourceType)
-		argIdx++
+		baseQuery += fmt.Sprintf(" AND resource_type = $%d", len(args))
 	}
 	if filters.SensitivityLevel != nil {
-		baseQuery += fmt.Sprintf(" AND sensitivity_level = $%d", argIdx)
 		args = append(args, *filters.SensitivityLevel)
-		argIdx++
+		baseQuery += fmt.Sprintf(" AND sensitivity_level = $%d", len(args))
 	}
 	if filters.PublicOnly {
 		baseQuery += " AND public_access = true"
@@ -382,32 +376,26 @@ type ListFindingFilters struct {
 func (s *Store) ListFindings(ctx context.Context, filters ListFindingFilters) ([]models.Finding, int, error) {
 	baseQuery := `FROM findings WHERE 1=1`
 	args := make([]interface{}, 0)
-	argIdx := 1
 
 	if filters.AccountID != nil {
-		baseQuery += fmt.Sprintf(" AND account_id = $%d", argIdx)
 		args = append(args, *filters.AccountID)
-		argIdx++
+		baseQuery += fmt.Sprintf(" AND account_id = $%d", len(args))
 	}
 	if filters.AssetID != nil {
-		baseQuery += fmt.Sprintf(" AND asset_id = $%d", argIdx)
 		args = append(args, *filters.AssetID)
-		argIdx++
+		baseQuery += fmt.Sprintf(" AND asset_id = $%d", len(args))
 	}
 	if filters.Severity != nil {
-		baseQuery += fmt.Sprintf(" AND severity = $%d", argIdx)
 		args = append(args, *filters.Severity)
-		argIdx++
+		baseQuery += fmt.Sprintf(" AND severity = $%d", len(args))
 	}
 	if filters.Status != nil {
-		baseQuery += fmt.Sprintf(" AND status = $%d", argIdx)
 		args = append(args, *filters.Status)
-		argIdx++
+		baseQuery += fmt.Sprintf(" AND status = $%d", len(args))
 	}
 	if filters.FindingType != nil {
-		baseQuery += fmt.Sprintf(" AND finding_type = $%d", argIdx)
 		args = append(args, *filters.FindingType)
-		_ = argIdx
+		baseQuery += fmt.Sprintf(" AND finding_type = $%d", len(args))
 	}
 
 	var total int
