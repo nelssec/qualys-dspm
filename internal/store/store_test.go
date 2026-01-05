@@ -146,8 +146,8 @@ func TestStore_DataAssets(t *testing.T) {
 		DisplayName:     "Test Assets Account",
 		ConnectorConfig: models.JSONB{},
 	}
-	store.CreateAccount(ctx, account)
-	defer store.DeleteAccount(ctx, account.ID)
+	_ = store.CreateAccount(ctx, account)
+	defer func() { _ = store.DeleteAccount(ctx, account.ID) }()
 
 	// Create asset
 	asset := &models.DataAsset{
@@ -225,8 +225,8 @@ func TestStore_Classifications(t *testing.T) {
 		ExternalID:      "test-class-" + uuid.New().String()[:8],
 		ConnectorConfig: models.JSONB{},
 	}
-	store.CreateAccount(ctx, account)
-	defer store.DeleteAccount(ctx, account.ID)
+	_ = store.CreateAccount(ctx, account)
+	defer func() { _ = store.DeleteAccount(ctx, account.ID) }()
 
 	asset := &models.DataAsset{
 		AccountID:    account.ID,

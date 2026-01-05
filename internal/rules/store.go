@@ -124,7 +124,7 @@ func (s *PostgresStore) DeleteRule(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	if _, err := tx.ExecContext(ctx, `DELETE FROM rule_patterns WHERE rule_id = $1`, id); err != nil {
 		return err
@@ -169,7 +169,7 @@ func (s *PostgresStore) SetRulePatterns(ctx context.Context, ruleID string, patt
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	if _, err := tx.ExecContext(ctx, `DELETE FROM rule_patterns WHERE rule_id = $1`, ruleID); err != nil {
 		return err

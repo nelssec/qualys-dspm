@@ -499,18 +499,18 @@ func (g *Generator) executiveToCSV(stats *Stats, accounts []*ReportAccount) ([]b
 	var buf bytes.Buffer
 	w := csv.NewWriter(&buf)
 
-	w.Write([]string{"Executive Summary Report"})
-	w.Write([]string{"Generated", time.Now().Format(time.RFC1123)})
-	w.Write([]string{""})
+	_ = w.Write([]string{"Executive Summary Report"})
+	_ = w.Write([]string{"Generated", time.Now().Format(time.RFC1123)})
+	_ = w.Write([]string{""})
 
-	w.Write([]string{"Metric", "Value"})
-	w.Write([]string{"Total Accounts", fmt.Sprintf("%d", stats.TotalAccounts)})
-	w.Write([]string{"Total Assets", fmt.Sprintf("%d", stats.TotalAssets)})
-	w.Write([]string{"Total Findings", fmt.Sprintf("%d", stats.TotalFindings)})
-	w.Write([]string{"Critical Findings", fmt.Sprintf("%d", stats.CriticalFindings)})
-	w.Write([]string{"High Findings", fmt.Sprintf("%d", stats.HighFindings)})
-	w.Write([]string{"Open Findings", fmt.Sprintf("%d", stats.OpenFindings)})
-	w.Write([]string{"Resolved Findings", fmt.Sprintf("%d", stats.ResolvedFindings)})
+	_ = w.Write([]string{"Metric", "Value"})
+	_ = w.Write([]string{"Total Accounts", fmt.Sprintf("%d", stats.TotalAccounts)})
+	_ = w.Write([]string{"Total Assets", fmt.Sprintf("%d", stats.TotalAssets)})
+	_ = w.Write([]string{"Total Findings", fmt.Sprintf("%d", stats.TotalFindings)})
+	_ = w.Write([]string{"Critical Findings", fmt.Sprintf("%d", stats.CriticalFindings)})
+	_ = w.Write([]string{"High Findings", fmt.Sprintf("%d", stats.HighFindings)})
+	_ = w.Write([]string{"Open Findings", fmt.Sprintf("%d", stats.OpenFindings)})
+	_ = w.Write([]string{"Resolved Findings", fmt.Sprintf("%d", stats.ResolvedFindings)})
 
 	w.Flush()
 	return buf.Bytes(), w.Error()
@@ -640,13 +640,13 @@ func (g *Generator) complianceToCSV(complianceMap map[string]*ComplianceStatus) 
 	var buf bytes.Buffer
 	w := csv.NewWriter(&buf)
 
-	w.Write([]string{"Compliance Report"})
-	w.Write([]string{""})
-	w.Write([]string{"Framework", "Total Checks", "Passed", "Failed", "Compliance %"})
+	_ = w.Write([]string{"Compliance Report"})
+	_ = w.Write([]string{""})
+	_ = w.Write([]string{"Framework", "Total Checks", "Passed", "Failed", "Compliance %"})
 
 	for _, status := range complianceMap {
 		compliancePct := float64(status.PassedChecks) / float64(status.TotalChecks) * 100
-		w.Write([]string{
+		_ = w.Write([]string{
 			status.Framework,
 			fmt.Sprintf("%d", status.TotalChecks),
 			fmt.Sprintf("%d", status.PassedChecks),

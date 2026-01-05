@@ -341,9 +341,9 @@ func (h *DefaultHandlers) Register(s *Scheduler) {
 
 	if h.CleanupFunc != nil {
 		s.RegisterHandler(JobTypeCleanupOld, func(ctx context.Context, job *Job) error {
-			days := 30 // default
+			days := 30
 			if d, ok := job.Config["retention_days"]; ok {
-				fmt.Sscanf(d, "%d", &days)
+				_, _ = fmt.Sscanf(d, "%d", &days)
 			}
 			return h.CleanupFunc(ctx, time.Duration(days)*24*time.Hour)
 		})
