@@ -1,0 +1,61 @@
+# DSPM Configuration Example
+# Copy this file to config.yaml and update values
+
+server:
+  host: "0.0.0.0"
+  port: 8080
+  read_timeout: 30s
+  write_timeout: 30s
+
+database:
+  host: "localhost"
+  port: 5432
+  user: "dspm"
+  password: "${DB_PASSWORD}"  # Use environment variable
+  database: "dspm"
+  ssl_mode: "disable"  # Use "require" in production
+  max_open_conns: 25
+  max_idle_conns: 5
+
+redis:
+  host: "localhost"
+  port: 6379
+  password: ""
+  db: 0
+
+neo4j:
+  uri: "bolt://localhost:7687"
+  user: "neo4j"
+  password: "${NEO4J_PASSWORD}"
+
+scanner:
+  workers: 10
+  batch_size: 100
+  scan_timeout: 5m
+  max_file_size: 104857600      # 100MB
+  sample_size: 1048576          # 1MB
+  files_per_bucket: 1000
+  random_sample_pct: 0.10
+  enabled_providers:
+    - AWS
+    - AZURE
+    - GCP
+
+# AWS Configuration (for direct access, not cross-account)
+aws:
+  region: "us-east-1"
+  # For cross-account scanning, configure in API when adding accounts
+  # assume_role_arn: ""
+  # external_id: ""
+
+# Azure Configuration
+azure:
+  tenant_id: "${AZURE_TENANT_ID}"
+  client_id: "${AZURE_CLIENT_ID}"
+  client_secret: "${AZURE_CLIENT_SECRET}"
+  subscription_id: "${AZURE_SUBSCRIPTION_ID}"
+
+# GCP Configuration
+gcp:
+  project_id: "${GCP_PROJECT_ID}"
+  credentials_file: "/path/to/service-account.json"
