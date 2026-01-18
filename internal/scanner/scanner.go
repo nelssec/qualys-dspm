@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -111,11 +112,14 @@ func (s *Scanner) Results() (<-chan *AssetResult, <-chan *ClassificationResult, 
 }
 
 func (s *Scanner) ScanStorage(ctx context.Context, conn connectors.StorageConnector, job *ScanJob) (*ScanProgress, error) {
+	log.Printf("[SCANNER] ScanStorage starting for job %s", job.ID)
 	progress := &ScanProgress{
 		StartedAt: time.Now(),
 	}
 
+	log.Printf("[SCANNER] Calling ListBuckets...")
 	buckets, err := conn.ListBuckets(ctx)
+	log.Printf("[SCANNER] ListBuckets returned %d buckets, err=%v", len(buckets), err)
 	if err != nil {
 		return progress, fmt.Errorf("listing buckets: %w", err)
 	}
@@ -165,6 +169,7 @@ func (s *Scanner) ScanStorage(ctx context.Context, conn connectors.StorageConnec
 }
 
 func (s *Scanner) scanBucket(ctx context.Context, conn connectors.StorageConnector, bucket connectors.BucketInfo, job *ScanJob, progress *ScanProgress) {
+	log.Printf("[SCANNER] scanBucket: starting for bucket %s, scan_type=%s", bucket.Name, job.ScanType)
 	metadata, err := conn.GetBucketMetadata(ctx, bucket.Name)
 	if err != nil {
 		s.errorCh <- &ScanError{
@@ -242,8 +247,10 @@ func (s *Scanner) scanBucket(ctx context.Context, conn connectors.StorageConnect
 }
 
 func (s *Scanner) scanBucketContents(ctx context.Context, conn connectors.StorageConnector, bucketName string, assetID uuid.UUID, job *ScanJob, progress *ScanProgress) {
+	log.Printf("[SCANNER] scanBucketContents: listing objects for bucket %s", bucketName)
 	objects, err := conn.ListObjects(ctx, bucketName, "", s.config.FilesPerBucket)
 	if err != nil {
+		log.Printf("[SCANNER] scanBucketContents: ListObjects error for %s: %v", bucketName, err)
 		s.errorCh <- &ScanError{
 			AssetARN: bucketName,
 			Phase:    "list_objects",
@@ -251,12 +258,14 @@ func (s *Scanner) scanBucketContents(ctx context.Context, conn connectors.Storag
 		}
 		return
 	}
+	log.Printf("[SCANNER] scanBucketContents: found %d objects in bucket %s", len(objects), bucketName)
 
 	progress.mu.Lock()
 	progress.TotalObjects += len(objects)
 	progress.mu.Unlock()
 
 	scannable := s.filterScannable(objects)
+	log.Printf("[SCANNER] scanBucketContents: %d scannable objects after filtering in bucket %s", len(scannable), bucketName)
 
 	objectCh := make(chan connectors.ObjectInfo, len(scannable))
 	var wg sync.WaitGroup
@@ -290,6 +299,7 @@ func (s *Scanner) scanBucketContents(ctx context.Context, conn connectors.Storag
 }
 
 func (s *Scanner) scanObject(ctx context.Context, conn connectors.StorageConnector, bucketName string, obj connectors.ObjectInfo, assetID uuid.UUID, progress *ScanProgress) {
+	log.Printf("[SCANNER] scanObject: scanning %s/%s (size: %d)", bucketName, obj.Key, obj.Size)
 	defer func() {
 		progress.mu.Lock()
 		progress.ScannedObjects++

@@ -1,6 +1,7 @@
 package classifier
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/qualys/dspm/internal/models"
@@ -47,11 +48,17 @@ func TestClassifier_Email(t *testing.T) {
 		content  string
 		expected bool
 	}{
-		{"valid email", "Contact us at test@example.com", true},
-		{"email with subdomain", "Email: user@mail.example.com", true},
-		{"email with plus", "Send to user+tag@example.com", true},
+		{"valid email", "Contact us at john.doe@acmecorp.com", true},
+		{"email with subdomain", "Email: user@mail.bigcompany.com", true},
+		{"email with plus", "Send to user+tag@mycompany.org", true},
 		{"no email", "Just some text without email", false},
 		{"invalid email", "Not an email@", false},
+		// Test exclusions
+		{"exclude example.com", "Contact us at test@example.com", false},
+		{"exclude noreply", "From: noreply@acmecorp.com", false},
+		// Test database connection string exclusion
+		{"exclude db connection string", "DATABASE_URL=postgresql://admin:password@db.production.com:5432/app", false},
+		{"exclude redis url", "REDIS_URL=redis://:secret@cache.myservice.io:6379", false},
 	}
 
 	for _, tt := range tests {
@@ -205,11 +212,49 @@ func TestClassifier_GitHubToken(t *testing.T) {
 	}
 }
 
+func TestClassifier_DBConnectionString(t *testing.T) {
+	c := New()
+
+	tests := []struct {
+		name     string
+		content  string
+		expected bool
+	}{
+		// True positives - real connection strings
+		{"postgresql url", "DATABASE_URL=postgresql://admin:secretpass@db.production.com:5432/app_db", true},
+		{"postgres url", "DB_URI=postgres://user:password123@localhost:5432/mydb", true},
+		{"mysql url", "MYSQL_URL=mysql://root:rootpass@mysql.server.com:3306/database", true},
+		{"mongodb url", "MONGO_URI=mongodb://admin:mongopass@cluster.mongodb.net:27017/db", true},
+		{"redis url", "REDIS_URL=redis://user:redispass@cache.server.com:6379", true},
+		// False positives - should NOT match
+		{"masked placeholder", "Qualys scanner IP addresses. pa************e} (Required for new vault) The", false},
+		{"documentation text", "ieberman ERPM server account. pa************e} (Required) The password for t", false},
+		{"asterisk mask", "he username must contain '@'. pa************e} (Required to create record, o", false},
+		{"no connection string", "Just some regular text without any database URLs", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := c.Classify(tt.content)
+			found := false
+			for _, m := range result.Matches {
+				if m.RuleName == "DB_CONNECTION_STRING" {
+					found = true
+					break
+				}
+			}
+			if found != tt.expected {
+				t.Errorf("expected DB_CONNECTION_STRING found=%v, got %v for content: %s", tt.expected, found, tt.content)
+			}
+		})
+	}
+}
+
 func TestClassifier_Sensitivity(t *testing.T) {
 	c := New()
 
 	// Content with SSN (CRITICAL) and Email (MEDIUM)
-	content := "SSN: 123-45-6789, Email: test@example.com"
+	content := "SSN: 123-45-6789, Email: john.doe@acmecorp.com"
 
 	result := c.Classify(content)
 
@@ -260,6 +305,73 @@ func TestClassifier_Redact(t *testing.T) {
 		if result != tt.expected {
 			t.Errorf("redact(%s) = %s, expected %s", tt.input, result, tt.expected)
 		}
+	}
+}
+
+func TestRedactContext(t *testing.T) {
+	tests := []struct {
+		name           string
+		context        string
+		sensitiveValue string
+		shouldContain  []string
+		shouldNotContain []string
+	}{
+		{
+			name:           "masks bank account and routing number together",
+			context:        "Bank Account: 933135462 (Routing: 916912404)",
+			sensitiveValue: "933135462",
+			shouldContain:  []string{"93*****62", "91*****04"},
+			shouldNotContain: []string{"933135462", "916912404"},
+		},
+		{
+			name:           "masks SSN pattern in context",
+			context:        "Customer SSN: 123-45-6789 lives at address",
+			sensitiveValue: "123-45-6789",
+			shouldContain:  []string{"12*******89"},
+			shouldNotContain: []string{"123-45-6789"},
+		},
+		{
+			name:           "masks long numeric strings",
+			context:        "Account number 12345678901234567 confirmed",
+			sensitiveValue: "12345678901234567",
+			shouldContain:  []string{"12*************67"},
+			shouldNotContain: []string{"12345678901234567"},
+		},
+		{
+			name:           "does not double-mask already masked values",
+			context:        "Account: 93*****62 is masked",
+			sensitiveValue: "",
+			shouldContain:  []string{"93*****62"},
+		},
+		{
+			name:           "masks phone numbers in context",
+			context:        "Contact: john@email.com,856-380-4673,123-45-6789,04/05/1975,5734 Elm St,Dallas",
+			sensitiveValue: "123-45-6789",
+			shouldContain:  []string{"12*******89"}, // SSN masked
+			shouldNotContain: []string{"856-380-4673", "john@email.com", "04/05/1975", "5734 Elm St"},
+		},
+		{
+			name:           "masks email and DOB",
+			context:        "User test.user@company.com born 12/25/1990 at 123 Main Ave",
+			sensitiveValue: "",
+			shouldNotContain: []string{"test.user@company.com", "12/25/1990", "123 Main Ave"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := redactContext(tt.context, tt.sensitiveValue)
+			for _, s := range tt.shouldContain {
+				if !strings.Contains(result, s) {
+					t.Errorf("redactContext result should contain %q, got: %q", s, result)
+				}
+			}
+			for _, s := range tt.shouldNotContain {
+				if strings.Contains(result, s) {
+					t.Errorf("redactContext result should NOT contain %q, got: %q", s, result)
+				}
+			}
+		})
 	}
 }
 
@@ -346,7 +458,7 @@ func BenchmarkClassifier(b *testing.B) {
 	c := New()
 	content := `
 		Name: John Doe
-		Email: john.doe@example.com
+		Email: john.doe@acmecorp.com
 		SSN: 123-45-6789
 		Phone: (555) 123-4567
 		Card: 4532 0151 1283 0366

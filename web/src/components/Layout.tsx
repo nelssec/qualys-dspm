@@ -6,10 +6,10 @@ import {
   FolderOpen,
   AlertTriangle,
   Clock,
-  Shield,
   FileText,
   Settings,
-  ShieldCheck
+  ShieldCheck,
+  Shield
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -34,15 +34,18 @@ export function Layout({ children }: LayoutProps) {
   const location = useLocation();
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Sidebar */}
-      <div className="fixed inset-y-0 left-0 w-64 bg-gray-900">
-        <div className="flex h-16 items-center px-6">
-          <Shield className="h-8 w-8 text-blue-500" />
-          <span className="ml-2 text-xl font-bold text-white">DSPM</span>
+    <div className="min-h-screen bg-qualys-bg">
+      <div className="fixed inset-y-0 left-0 w-56 bg-qualys-sidebar flex flex-col">
+        <div className="flex h-14 items-center px-4 border-b border-qualys-sidebar-hover">
+          <Shield className="h-7 w-7 text-qualys-accent" />
+          <div className="ml-2">
+            <span className="text-base font-medium text-white">Qualys</span>
+            <span className="text-[10px] text-qualys-accent ml-1 uppercase tracking-wider">DSPM</span>
+          </div>
         </div>
-        <nav className="mt-6 px-3">
-          <div className="mb-2 px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+
+        <nav className="flex-1 py-4 px-2 overflow-y-auto">
+          <div className="mb-1 px-3 text-[10px] font-medium text-qualys-text-muted uppercase tracking-wider">
             Overview
           </div>
           {navigation.map((item) => {
@@ -52,19 +55,19 @@ export function Layout({ children }: LayoutProps) {
                 key={item.name}
                 to={item.href}
                 className={clsx(
-                  'flex items-center px-3 py-2 mt-1 rounded-lg text-sm font-medium',
+                  'flex items-center px-3 py-2 mt-0.5 rounded text-[13px] transition-colors',
                   isActive
-                    ? 'bg-gray-800 text-white'
-                    : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                    ? 'bg-qualys-sidebar-active text-white'
+                    : 'text-qualys-text-muted hover:bg-qualys-sidebar-hover hover:text-white'
                 )}
               >
-                <item.icon className="mr-3 h-5 w-5" />
+                <item.icon className="mr-3 h-4 w-4" />
                 {item.name}
               </Link>
             );
           })}
 
-          <div className="mt-8 mb-2 px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+          <div className="mt-6 mb-1 px-3 text-[10px] font-medium text-qualys-text-muted uppercase tracking-wider">
             Management
           </div>
           {management.map((item) => {
@@ -74,37 +77,37 @@ export function Layout({ children }: LayoutProps) {
                 key={item.name}
                 to={item.href}
                 className={clsx(
-                  'flex items-center px-3 py-2 mt-1 rounded-lg text-sm font-medium',
+                  'flex items-center px-3 py-2 mt-0.5 rounded text-[13px] transition-colors',
                   isActive
-                    ? 'bg-gray-800 text-white'
-                    : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                    ? 'bg-qualys-sidebar-active text-white'
+                    : 'text-qualys-text-muted hover:bg-qualys-sidebar-hover hover:text-white'
                 )}
               >
-                <item.icon className="mr-3 h-5 w-5" />
+                <item.icon className="mr-3 h-4 w-4" />
                 {item.name}
               </Link>
             );
           })}
         </nav>
-        <div className="absolute bottom-0 left-0 right-0 p-4">
+
+        <div className="p-2 border-t border-qualys-sidebar-hover">
           <Link
             to="/settings"
             className={clsx(
-              'flex items-center px-3 py-2 rounded-lg text-sm font-medium',
+              'flex items-center px-3 py-2 rounded text-[13px] transition-colors',
               location.pathname === '/settings'
-                ? 'bg-gray-800 text-white'
-                : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                ? 'bg-qualys-sidebar-active text-white'
+                : 'text-qualys-text-muted hover:bg-qualys-sidebar-hover hover:text-white'
             )}
           >
-            <Settings className="mr-3 h-5 w-5" />
+            <Settings className="mr-3 h-4 w-4" />
             Settings
           </Link>
         </div>
       </div>
 
-      {/* Main content */}
-      <div className="pl-64">
-        <main className="py-6 px-8">
+      <div className="pl-56 min-w-0 overflow-x-hidden">
+        <main className="py-5 px-6 max-w-full overflow-hidden">
           {children}
         </main>
       </div>

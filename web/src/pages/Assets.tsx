@@ -6,7 +6,6 @@ import {
   Globe,
   Lock,
   Search,
-  Filter,
   ChevronRight
 } from 'lucide-react';
 import { getAssets } from '../api/client';
@@ -14,27 +13,42 @@ import type { Sensitivity } from '../types';
 import clsx from 'clsx';
 
 const SENSITIVITY_BADGES = {
-  CRITICAL: 'bg-red-100 text-red-800',
-  HIGH: 'bg-orange-100 text-orange-800',
-  MEDIUM: 'bg-yellow-100 text-yellow-800',
-  LOW: 'bg-green-100 text-green-800',
-  UNKNOWN: 'bg-gray-100 text-gray-800',
+  CRITICAL: 'bg-severity-critical/10 text-severity-critical border-severity-critical/20',
+  HIGH: 'bg-severity-high/10 text-severity-high border-severity-high/20',
+  MEDIUM: 'bg-severity-medium/10 text-severity-medium border-severity-medium/20',
+  LOW: 'bg-severity-low/10 text-severity-low border-severity-low/20',
+  UNKNOWN: 'bg-severity-info/10 text-severity-info border-severity-info/20',
 };
+
+const PAGE_SIZE_OPTIONS = [25, 50, 100, 250, 0] as const;
 
 export function Assets() {
   const [search, setSearch] = useState('');
   const [sensitivityFilter, setSensitivityFilter] = useState<Sensitivity | ''>('');
   const [publicOnly, setPublicOnly] = useState(false);
+  const [pageSize, setPageSize] = useState<number>(50);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['assets', sensitivityFilter, publicOnly],
+    queryKey: ['assets', sensitivityFilter, publicOnly, pageSize, currentPage],
     queryFn: () =>
       getAssets({
         sensitivity: sensitivityFilter || undefined,
         public_only: publicOnly || undefined,
-        limit: 100,
+        limit: pageSize === 0 ? 10000 : pageSize,
+        offset: pageSize === 0 ? 0 : (currentPage - 1) * pageSize,
       }),
   });
+
+  const handleFilterChange = (newFilter: Sensitivity | '') => {
+    setSensitivityFilter(newFilter);
+    setCurrentPage(1);
+  };
+
+  const handlePageSizeChange = (newSize: number) => {
+    setPageSize(newSize);
+    setCurrentPage(1);
+  };
 
   const filteredAssets = data?.assets.filter((asset) =>
     asset.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -43,33 +57,32 @@ export function Assets() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Data Assets</h1>
-        <div className="text-sm text-gray-500">
+      <div className="flex items-center justify-between mb-5">
+        <h1 className="text-lg font-medium text-qualys-text-primary">Data Assets</h1>
+        <div className="text-xs text-qualys-text-muted">
           {data?.total || 0} total assets
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="bg-white rounded-lg shadow p-4 mb-6">
-        <div className="flex flex-wrap items-center gap-4">
+      <div className="bg-white border border-qualys-border rounded shadow-qualys-sm p-4 mb-4">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="flex-1 min-w-[200px]">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-qualys-text-muted" />
               <input
                 type="text"
                 placeholder="Search assets..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                className="w-full pl-9 pr-4 py-2 text-sm border border-qualys-border rounded focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
               />
             </div>
           </div>
 
           <select
             value={sensitivityFilter}
-            onChange={(e) => setSensitivityFilter(e.target.value as Sensitivity | '')}
-            className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+            onChange={(e) => handleFilterChange(e.target.value as Sensitivity | '')}
+            className="px-3 py-2 text-sm border border-qualys-border rounded focus:ring-1 focus:ring-primary-500"
           >
             <option value="">All Sensitivities</option>
             <option value="CRITICAL">Critical</option>
@@ -83,104 +96,103 @@ export function Assets() {
               type="checkbox"
               checked={publicOnly}
               onChange={(e) => setPublicOnly(e.target.checked)}
-              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              className="rounded border-qualys-border text-primary-500 focus:ring-primary-500"
             />
-            <span className="ml-2 text-sm text-gray-700">Public only</span>
+            <span className="ml-2 text-sm text-qualys-text-secondary">Public only</span>
           </label>
         </div>
       </div>
 
-      {/* Assets Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className="bg-white border border-qualys-border rounded shadow-qualys-sm overflow-hidden">
         {isLoading ? (
           <div className="flex items-center justify-center h-64">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500" />
           </div>
         ) : filteredAssets && filteredAssets.length > 0 ? (
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+          <table className="min-w-full divide-y divide-qualys-border">
+            <thead className="bg-qualys-bg">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-[11px] font-medium text-qualys-text-secondary uppercase tracking-wider">
                   Asset
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-[11px] font-medium text-qualys-text-secondary uppercase tracking-wider">
                   Type
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-[11px] font-medium text-qualys-text-secondary uppercase tracking-wider">
                   Sensitivity
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-[11px] font-medium text-qualys-text-secondary uppercase tracking-wider">
                   Classifications
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-[11px] font-medium text-qualys-text-secondary uppercase tracking-wider">
                   Status
                 </th>
-                <th className="relative px-6 py-3">
+                <th className="relative px-4 py-3">
                   <span className="sr-only">View</span>
                 </th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-white divide-y divide-qualys-border">
               {filteredAssets.map((asset) => (
-                <tr key={asset.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4">
+                <tr key={asset.id} className="hover:bg-qualys-bg transition-colors">
+                  <td className="px-4 py-3">
                     <div className="flex items-center">
-                      <FolderOpen className="h-5 w-5 text-gray-400 mr-3" />
+                      <FolderOpen className="h-4 w-4 text-qualys-text-muted mr-2.5" />
                       <div>
-                        <div className="text-sm font-medium text-gray-900">
+                        <div className="text-sm font-medium text-qualys-text-primary">
                           {asset.name}
                         </div>
-                        <div className="text-sm text-gray-500 truncate max-w-md">
+                        <div className="text-[11px] text-qualys-text-muted truncate max-w-md">
                           {asset.resource_arn}
                         </div>
                       </div>
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="text-sm text-gray-900">
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <span className="text-sm text-qualys-text-primary">
                       {asset.resource_type.replace('_', ' ')}
                     </span>
-                    <div className="text-xs text-gray-500">{asset.region}</div>
+                    <div className="text-[11px] text-qualys-text-muted">{asset.region}</div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-4 py-3 whitespace-nowrap">
                     <span
                       className={clsx(
-                        'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium',
+                        'inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium border',
                         SENSITIVITY_BADGES[asset.sensitivity_level]
                       )}
                     >
                       {asset.sensitivity_level}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <div className="text-sm text-qualys-text-primary">
                       {asset.classification_count} findings
                     </div>
-                    <div className="text-xs text-gray-500">
+                    <div className="text-[11px] text-qualys-text-muted">
                       {asset.data_categories?.join(', ') || 'None'}
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-4 py-3 whitespace-nowrap">
                     <div className="flex items-center space-x-2">
                       {asset.public_access ? (
-                        <span className="inline-flex items-center text-red-600">
-                          <Globe className="h-4 w-4 mr-1" />
+                        <span className="inline-flex items-center text-xs text-severity-critical">
+                          <Globe className="h-3.5 w-3.5 mr-1" />
                           Public
                         </span>
                       ) : (
-                        <span className="inline-flex items-center text-green-600">
-                          <Lock className="h-4 w-4 mr-1" />
+                        <span className="inline-flex items-center text-xs text-severity-low">
+                          <Lock className="h-3.5 w-3.5 mr-1" />
                           Private
                         </span>
                       )}
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                  <td className="px-4 py-3 whitespace-nowrap text-right text-sm font-medium">
                     <Link
                       to={`/assets/${asset.id}`}
-                      className="text-primary-600 hover:text-primary-900"
+                      className="text-primary-500 hover:text-primary-700"
                     >
-                      <ChevronRight className="h-5 w-5" />
+                      <ChevronRight className="h-4 w-4" />
                     </Link>
                   </td>
                 </tr>
@@ -188,9 +200,90 @@ export function Assets() {
             </tbody>
           </table>
         ) : (
-          <div className="flex flex-col items-center justify-center h-64 text-gray-500">
-            <FolderOpen className="h-12 w-12 mb-4" />
-            <p>No assets found</p>
+          <div className="flex flex-col items-center justify-center h-64 text-qualys-text-muted">
+            <FolderOpen className="h-10 w-10 mb-3" />
+            <p className="text-sm">No assets found</p>
+          </div>
+        )}
+
+        {data && data.total > 0 && (
+          <div className="px-4 py-3 border-t border-qualys-border flex items-center justify-between bg-white">
+            <div className="flex items-center gap-4">
+              <div className="text-xs text-qualys-text-muted">
+                {pageSize === 0 ? (
+                  `Showing all ${data.total} assets`
+                ) : (
+                  `Showing ${Math.min((currentPage - 1) * pageSize + 1, data.total)}-${Math.min(currentPage * pageSize, data.total)} of ${data.total} assets`
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-qualys-text-muted">Show:</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                  className="px-2 py-1 text-xs border border-qualys-border rounded focus:ring-1 focus:ring-primary-500"
+                >
+                  {PAGE_SIZE_OPTIONS.map((size) => (
+                    <option key={size} value={size}>
+                      {size === 0 ? 'All' : size}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            {pageSize !== 0 && (
+              <div className="flex gap-1">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 text-xs border border-qualys-border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-qualys-bg"
+                >
+                  Previous
+                </button>
+                {(() => {
+                  const totalPages = Math.ceil(data.total / pageSize);
+                  const pages: (number | string)[] = [];
+
+                  if (totalPages <= 7) {
+                    for (let i = 1; i <= totalPages; i++) pages.push(i);
+                  } else {
+                    pages.push(1);
+                    if (currentPage > 3) pages.push('...');
+                    for (let i = Math.max(2, currentPage - 1); i <= Math.min(totalPages - 1, currentPage + 1); i++) {
+                      pages.push(i);
+                    }
+                    if (currentPage < totalPages - 2) pages.push('...');
+                    pages.push(totalPages);
+                  }
+
+                  return pages.map((page, idx) => (
+                    typeof page === 'number' ? (
+                      <button
+                        key={idx}
+                        onClick={() => setCurrentPage(page)}
+                        className={clsx(
+                          'px-3 py-1 text-xs rounded',
+                          page === currentPage
+                            ? 'bg-primary-500 text-white'
+                            : 'border border-qualys-border hover:bg-qualys-bg'
+                        )}
+                      >
+                        {page}
+                      </button>
+                    ) : (
+                      <span key={idx} className="px-2 py-1 text-xs text-qualys-text-muted">...</span>
+                    )
+                  ));
+                })()}
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(Math.ceil(data.total / pageSize), p + 1))}
+                  disabled={currentPage >= Math.ceil(data.total / pageSize)}
+                  className="px-3 py-1 text-xs border border-qualys-border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-qualys-bg"
+                >
+                  Next
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

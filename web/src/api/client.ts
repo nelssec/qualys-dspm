@@ -19,7 +19,6 @@ const apiClient = axios.create({
   },
 });
 
-// Add auth token to requests
 apiClient.interceptors.request.use((config) => {
   const token = localStorage.getItem('access_token');
   if (token) {
@@ -28,7 +27,6 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
-// Handle token refresh
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -52,7 +50,6 @@ apiClient.interceptors.response.use(
   }
 );
 
-// Types for new features
 export interface ScheduledJob {
   id: string;
   name: string;
@@ -116,7 +113,6 @@ export interface ReportType {
   description: string;
 }
 
-// Auth API
 const login = async (email: string, password: string): Promise<TokenPair> => {
   const { data } = await axios.post<ApiResponse<TokenPair>>('/api/v1/auth/login', { email, password });
   return data.data!;
@@ -133,7 +129,6 @@ const getCurrentUser = async (): Promise<User> => {
   return data.data!;
 };
 
-// Accounts
 const getAccounts = async (): Promise<CloudAccount[]> => {
   const { data } = await apiClient.get<ApiResponse<CloudAccount[]>>('/accounts');
   return data.data || [];
@@ -165,7 +160,6 @@ const triggerScan = async (accountId: string, scanType: ScanType): Promise<ScanJ
   return data.data!;
 };
 
-// Assets
 const getAssets = async (params?: {
   account_id?: string;
   resource_type?: string;
@@ -191,7 +185,6 @@ const getAssetClassifications = async (id: string): Promise<Classification[]> =>
   return data.data || [];
 };
 
-// Findings
 const getFindings = async (params?: {
   account_id?: string;
   asset_id?: string;
@@ -225,7 +218,6 @@ const updateFindingStatus = async (
   return data.data!;
 };
 
-// Scans
 const getScans = async (): Promise<ScanJob[]> => {
   const { data } = await apiClient.get<ApiResponse<ScanJob[]>>('/scans');
   return data.data || [];
@@ -236,7 +228,6 @@ const getScan = async (id: string): Promise<ScanJob> => {
   return data.data!;
 };
 
-// Dashboard
 const getDashboardSummary = async (): Promise<DashboardSummary> => {
   const { data } = await apiClient.get<ApiResponse<DashboardSummary>>('/dashboard/summary');
   return data.data!;
@@ -254,7 +245,6 @@ const getFindingStats = async (accountId?: string): Promise<Record<string, Recor
   return data.data || {};
 };
 
-// Scheduled Jobs API
 const listScheduledJobs = async (): Promise<ScheduledJob[]> => {
   const { data } = await apiClient.get<ApiResponse<ScheduledJob[]>>('/jobs');
   return data.data || [];
@@ -278,7 +268,6 @@ const runScheduledJobNow = async (id: string): Promise<void> => {
   await apiClient.post(`/jobs/${id}/run`);
 };
 
-// Custom Rules API
 const listRules = async (): Promise<CustomRule[]> => {
   const { data } = await apiClient.get<ApiResponse<CustomRule[]>>('/rules');
   return data.data || [];
@@ -308,7 +297,6 @@ const getRuleTemplates = async (): Promise<RuleTemplate[]> => {
   return data.data || [];
 };
 
-// Reports API
 const getReportTypes = async (): Promise<ReportType[]> => {
   const { data } = await apiClient.get<ApiResponse<ReportType[]>>('/reports/types');
   return data.data || [];
@@ -331,7 +319,6 @@ const generateReport = async (request: {
   return response.data;
 };
 
-// Notification Settings API
 const getNotificationSettings = async (): Promise<NotificationSettings> => {
   const { data } = await apiClient.get<ApiResponse<NotificationSettings>>('/notifications/settings');
   return data.data!;
@@ -345,59 +332,77 @@ const testNotification = async (channel: string): Promise<void> => {
   await apiClient.post(`/notifications/test?channel=${channel}`);
 };
 
-// Export all functions
-export const api = {
-  // Auth
+export {
   login,
   logout,
   getCurrentUser,
-
-  // Accounts
   getAccounts,
   getAccount,
   createAccount,
   deleteAccount,
   triggerScan,
-
-  // Assets
   getAssets,
   getAsset,
   getAssetClassifications,
-
-  // Findings
   getFindings,
   getFinding,
   updateFindingStatus,
-
-  // Scans
   getScans,
   getScan,
-
-  // Dashboard
   getDashboardSummary,
   getClassificationStats,
   getFindingStats,
-
-  // Scheduled Jobs
   listScheduledJobs,
   createScheduledJob,
   updateScheduledJob,
   deleteScheduledJob,
   runScheduledJobNow,
-
-  // Custom Rules
   listRules,
   createRule,
   updateRule,
   deleteRule,
   testRule,
   getRuleTemplates,
-
-  // Reports
   getReportTypes,
   generateReport,
+  getNotificationSettings,
+  updateNotificationSettings,
+  testNotification,
+};
 
-  // Notifications
+export const api = {
+  login,
+  logout,
+  getCurrentUser,
+  getAccounts,
+  getAccount,
+  createAccount,
+  deleteAccount,
+  triggerScan,
+  getAssets,
+  getAsset,
+  getAssetClassifications,
+  getFindings,
+  getFinding,
+  updateFindingStatus,
+  getScans,
+  getScan,
+  getDashboardSummary,
+  getClassificationStats,
+  getFindingStats,
+  listScheduledJobs,
+  createScheduledJob,
+  updateScheduledJob,
+  deleteScheduledJob,
+  runScheduledJobNow,
+  listRules,
+  createRule,
+  updateRule,
+  deleteRule,
+  testRule,
+  getRuleTemplates,
+  getReportTypes,
+  generateReport,
   getNotificationSettings,
   updateNotificationSettings,
   testNotification,

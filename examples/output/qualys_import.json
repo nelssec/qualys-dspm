@@ -1,0 +1,205 @@
+{
+  "source": "qualys-dspm",
+  "timestamp": "2026-01-16T16:10:35-08:00",
+  "assets": [
+    {
+      "externalId": "arn:aws:s3:::customer-data-prod",
+      "name": "customer-data-prod",
+      "type": "S3_BUCKET",
+      "provider": "AWS",
+      "region": "us-east-1",
+      "tags": [
+        {
+          "key": "Environment",
+          "value": "production"
+        },
+        {
+          "key": "Team",
+          "value": "data-platform"
+        },
+        {
+          "key": "CostCenter",
+          "value": "engineering"
+        },
+        {
+          "key": "dspm:sensitivity",
+          "value": "CRITICAL"
+        },
+        {
+          "key": "dspm:encryption",
+          "value": "SSE_KMS"
+        }
+      ],
+      "attributes": {
+        "classificationCount": 2,
+        "encryptionStatus": "SSE_KMS",
+        "publicAccess": false,
+        "sensitivityLevel": "CRITICAL"
+      },
+      "lastSeen": "2026-01-16T14:10:35-08:00"
+    },
+    {
+      "externalId": "arn:aws:s3:::app-logs-prod",
+      "name": "app-logs-prod",
+      "type": "S3_BUCKET",
+      "provider": "AWS",
+      "region": "us-east-1",
+      "tags": [
+        {
+          "key": "Environment",
+          "value": "production"
+        },
+        {
+          "key": "Team",
+          "value": "payments"
+        },
+        {
+          "key": "dspm:sensitivity",
+          "value": "HIGH"
+        },
+        {
+          "key": "dspm:encryption",
+          "value": "SSE"
+        }
+      ],
+      "attributes": {
+        "classificationCount": 1,
+        "encryptionStatus": "SSE",
+        "publicAccess": false,
+        "sensitivityLevel": "HIGH"
+      },
+      "lastSeen": "2026-01-16T11:10:35-08:00"
+    },
+    {
+      "externalId": "arn:aws:rds:us-east-1:123456789:db:healthcare-db",
+      "name": "healthcare-db",
+      "type": "RDS_INSTANCE",
+      "provider": "AWS",
+      "region": "us-east-1",
+      "tags": [
+        {
+          "key": "Environment",
+          "value": "production"
+        },
+        {
+          "key": "Compliance",
+          "value": "HIPAA"
+        },
+        {
+          "key": "dspm:sensitivity",
+          "value": "CRITICAL"
+        },
+        {
+          "key": "dspm:encryption",
+          "value": "CMK"
+        }
+      ],
+      "attributes": {
+        "classificationCount": 1,
+        "encryptionStatus": "CMK",
+        "publicAccess": false,
+        "sensitivityLevel": "CRITICAL"
+      },
+      "lastSeen": "2026-01-16T15:10:35-08:00"
+    },
+    {
+      "externalId": "arn:aws:s3:::deployments-config",
+      "name": "deployments-config",
+      "type": "S3_BUCKET",
+      "provider": "AWS",
+      "region": "us-east-1",
+      "tags": [
+        {
+          "key": "Environment",
+          "value": "production"
+        },
+        {
+          "key": "Team",
+          "value": "devops"
+        },
+        {
+          "key": "dspm:sensitivity",
+          "value": "CRITICAL"
+        },
+        {
+          "key": "dspm:encryption",
+          "value": "NONE"
+        }
+      ],
+      "attributes": {
+        "classificationCount": 1,
+        "encryptionStatus": "NONE",
+        "publicAccess": true,
+        "sensitivityLevel": "CRITICAL"
+      },
+      "lastSeen": "2026-01-15T16:10:35-08:00"
+    }
+  ],
+  "findings": [
+    {
+      "externalId": "finding-001",
+      "assetId": "arn:aws:s3:::customer-data-prod",
+      "title": "Unencrypted SSN data detected in S3 bucket",
+      "description": "Social Security Numbers were detected in plain text within CSV files. 1,247 instances found across 2 files.",
+      "severity": 5,
+      "category": "PII",
+      "status": "open",
+      "remediation": "1. Enable server-side encryption with KMS\n2. Implement data masking for SSN fields\n3. Review access policies",
+      "complianceIds": [
+        "GDPR-Art32",
+        "SOC2-CC6.1",
+        "PCI-DSS-3.4"
+      ],
+      "detectedDate": "2026-01-16T14:10:35-08:00",
+      "evidence": "{\"match_count\":1247,\"pattern_detected\":\"XXX-XX-XXXX\",\"sample_files\":[\"customers/2024/q4/export.csv\"]}"
+    },
+    {
+      "externalId": "finding-002",
+      "assetId": "arn:aws:s3:::app-logs-prod",
+      "title": "Credit card numbers logged in application logs",
+      "description": "Payment card numbers were found in application log files, violating PCI-DSS requirements.",
+      "severity": 5,
+      "category": "PCI",
+      "status": "in_progress",
+      "remediation": "1. Implement log sanitization\n2. Update logging configuration to mask card numbers\n3. Rotate potentially exposed cards",
+      "complianceIds": [
+        "PCI-DSS-3.4",
+        "PCI-DSS-10.2"
+      ],
+      "detectedDate": "2026-01-16T11:10:35-08:00",
+      "evidence": "{\"card_prefixes\":[\"4111****\",\"5500****\"],\"log_file\":\"payment-service/2024-01-15.log\",\"match_count\":23}"
+    },
+    {
+      "externalId": "finding-003",
+      "assetId": "arn:aws:s3:::deployments-config",
+      "title": "AWS access keys exposed in public bucket",
+      "description": "Active AWS access keys were found in configuration files within a publicly accessible S3 bucket.",
+      "severity": 5,
+      "category": "SECRETS",
+      "status": "open",
+      "remediation": "1. IMMEDIATELY rotate exposed credentials\n2. Remove public access from bucket\n3. Enable bucket encryption\n4. Review CloudTrail for unauthorized access",
+      "complianceIds": [
+        "CIS-AWS-1.14",
+        "SOC2-CC6.1"
+      ],
+      "detectedDate": "2026-01-15T16:10:35-08:00",
+      "evidence": "{\"bucket_public\":true,\"files_affected\":[\"config/prod.env\",\"scripts/deploy.sh\"],\"key_prefix\":\"AKIA****\"}"
+    },
+    {
+      "externalId": "finding-004",
+      "assetId": "arn:aws:rds:us-east-1:123456789:db:healthcare-db",
+      "title": "PHI data lacks field-level encryption",
+      "description": "Protected Health Information in the patients table is not encrypted at the field level, only at rest.",
+      "severity": 4,
+      "category": "PHI",
+      "status": "open",
+      "remediation": "1. Implement application-level encryption for PHI fields\n2. Consider using AWS DynamoDB client-side encryption\n3. Update data handling procedures",
+      "complianceIds": [
+        "HIPAA-164.312(a)(1)",
+        "HIPAA-164.312(e)(1)"
+      ],
+      "detectedDate": "2026-01-16T15:10:35-08:00",
+      "evidence": "{\"phi_fields\":[\"diagnosis\",\"treatment\",\"medications\"],\"tables_affected\":[\"patients\",\"medical_history\"]}"
+    }
+  ]
+}

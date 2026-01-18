@@ -2,8 +2,10 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -141,6 +143,9 @@ func (s *Server) triggerScan(w http.ResponseWriter, r *http.Request) {
 
 	if req.ScanType == "" {
 		req.ScanType = models.ScanTypeFull
+	} else {
+		// Normalize scan type to uppercase to match constants
+		req.ScanType = models.ScanType(strings.ToUpper(string(req.ScanType)))
 	}
 
 	account, err := s.store.GetAccount(r.Context(), accountID)
@@ -170,6 +175,9 @@ func (s *Server) triggerScan(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
+
+	// Start the scan in the background
+	s.scanExecutor.ExecuteScan(r.Context(), job, account)
 
 	respondJSON(w, http.StatusAccepted, job)
 }
@@ -256,6 +264,34 @@ func (s *Server) getAssetClassifications(w http.ResponseWriter, r *http.Request)
 	}
 
 	respondJSON(w, http.StatusOK, classifications)
+}
+
+func (s *Server) listAllClassifications(w http.ResponseWriter, r *http.Request) {
+	limit := 500
+	offset := 0
+
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 && parsed <= 5000 {
+			limit = parsed
+		}
+	}
+	if o := r.URL.Query().Get("offset"); o != "" {
+		if parsed, err := strconv.Atoi(o); err == nil && parsed >= 0 {
+			offset = parsed
+		}
+	}
+
+	classifications, total, err := s.store.ListAllClassifications(r.Context(), limit, offset)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		return
+	}
+
+	respondJSONWithMeta(w, http.StatusOK, classifications, &apiMeta{
+		Total:  total,
+		Limit:  limit,
+		Offset: offset,
+	})
 }
 
 func (s *Server) listFindings(w http.ResponseWriter, r *http.Request) {
@@ -369,8 +405,14 @@ func (s *Server) updateFindingStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listScans(w http.ResponseWriter, r *http.Request) {
+	limit := 100
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
 
-	scans, err := s.store.ListPendingScanJobs(r.Context(), 100)
+	scans, err := s.store.ListAllScanJobs(r.Context(), limit)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "db_error", err.Error())
 		return
@@ -400,6 +442,48 @@ func (s *Server) getScan(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, scan)
 }
 
+func (s *Server) clearStuckScans(w http.ResponseWriter, r *http.Request) {
+	count, err := s.store.ClearStuckScanJobs(r.Context())
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"cleared": count,
+		"message": fmt.Sprintf("Cleared %d stuck scan jobs", count),
+	})
+}
+
+func (s *Server) cancelScan(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "scanID")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid_id", "Invalid scan ID")
+		return
+	}
+
+	if err := s.store.CancelScanJob(r.Context(), id); err != nil {
+		respondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"status": "cancelled"})
+}
+
+func (s *Server) clearAllScanData(w http.ResponseWriter, r *http.Request) {
+	counts, err := s.store.ClearAllScanData(r.Context())
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"cleared": counts,
+		"message": "All scan data cleared successfully",
+	})
+}
+
 type dashboardSummary struct {
 	Accounts struct {
 		Total  int `json:"total"`
@@ -414,6 +498,9 @@ type dashboardSummary struct {
 		Total    int `json:"total"`
 		Open     int `json:"open"`
 		Critical int `json:"critical"`
+		High     int `json:"high"`
+		Medium   int `json:"medium"`
+		Low      int `json:"low"`
 	} `json:"findings"`
 	Classifications struct {
 		Total      int            `json:"total"`
@@ -439,6 +526,9 @@ func (s *Server) getDashboardSummary(w http.ResponseWriter, r *http.Request) {
 	summary.Findings.Total = counts.TotalFindings
 	summary.Findings.Open = counts.OpenFindings
 	summary.Findings.Critical = counts.CriticalFindings
+	summary.Findings.High = counts.HighFindings
+	summary.Findings.Medium = counts.MediumFindings
+	summary.Findings.Low = counts.LowFindings
 
 	classStats, err := s.store.GetClassificationStats(r.Context(), nil)
 	if err != nil {

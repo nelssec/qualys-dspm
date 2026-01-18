@@ -20,7 +20,6 @@ export function Settings() {
     min_severity: 'high',
   });
 
-  // Update form when settings load
   useState(() => {
     if (settings) {
       setFormData({
@@ -60,15 +59,13 @@ export function Settings() {
     <div className="max-w-4xl space-y-8">
       <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
 
-      {/* Notification Settings */}
       <div className="bg-white rounded-lg shadow p-6">
         <div className="flex items-center gap-2 mb-6">
-          <Bell className="w-5 h-5 text-blue-600" />
+          <Bell className="w-5 h-5 text-primary-500" />
           <h2 className="text-lg font-semibold">Notification Settings</h2>
         </div>
 
         <div className="space-y-6">
-          {/* Minimum Severity */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Minimum Severity to Notify
@@ -76,7 +73,7 @@ export function Settings() {
             <select
               value={formData.min_severity}
               onChange={(e) => setFormData({ ...formData, min_severity: e.target.value })}
-              className="block w-full max-w-xs rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              className="block w-full max-w-xs rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
             >
               <option value="low">Low and above</option>
               <option value="medium">Medium and above</option>
@@ -85,7 +82,6 @@ export function Settings() {
             </select>
           </div>
 
-          {/* Slack Settings */}
           <div className="border-t pt-6">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
@@ -99,7 +95,7 @@ export function Settings() {
                   onChange={(e) => setFormData({ ...formData, slack_enabled: e.target.checked })}
                   className="sr-only peer"
                 />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-500"></div>
               </label>
             </div>
 
@@ -112,7 +108,7 @@ export function Settings() {
                     value={formData.slack_webhook_url}
                     onChange={(e) => setFormData({ ...formData, slack_webhook_url: e.target.value })}
                     placeholder="https://hooks.slack.com/services/..."
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
                   />
                 </div>
                 <div>
@@ -122,7 +118,7 @@ export function Settings() {
                     value={formData.slack_channel}
                     onChange={(e) => setFormData({ ...formData, slack_channel: e.target.value })}
                     placeholder="#security-alerts"
-                    className="mt-1 block w-full max-w-xs rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    className="mt-1 block w-full max-w-xs rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
                   />
                 </div>
                 <button
@@ -135,11 +131,10 @@ export function Settings() {
             )}
           </div>
 
-          {/* Email Settings */}
           <div className="border-t pt-6">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
-                <Mail className="w-5 h-5 text-blue-600" />
+                <Mail className="w-5 h-5 text-primary-500" />
                 <h3 className="font-medium">Email Notifications</h3>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
@@ -149,7 +144,7 @@ export function Settings() {
                   onChange={(e) => setFormData({ ...formData, email_enabled: e.target.checked })}
                   className="sr-only peer"
                 />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-500"></div>
               </label>
             </div>
 
@@ -162,13 +157,13 @@ export function Settings() {
                     value={formData.email_recipients}
                     onChange={(e) => setFormData({ ...formData, email_recipients: e.target.value })}
                     placeholder="security@company.com, alerts@company.com"
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
                   />
                   <p className="mt-1 text-xs text-gray-500">Comma-separated email addresses</p>
                 </div>
                 <button
                   onClick={() => testMutation.mutate('email')}
-                  className="w-fit flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-50 text-blue-700 rounded hover:bg-blue-100"
+                  className="w-fit flex items-center gap-2 px-3 py-1.5 text-sm bg-primary-50 text-primary-600 rounded hover:bg-primary-100"
                 >
                   <Send className="w-4 h-4" /> Send Test Email
                 </button>
@@ -177,12 +172,11 @@ export function Settings() {
           </div>
         </div>
 
-        {/* Save Button */}
         <div className="mt-8 pt-6 border-t flex justify-end">
           <button
             onClick={handleSave}
             disabled={updateMutation.isPending}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            className="flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 disabled:opacity-50"
           >
             <Save className="w-4 h-4" />
             {updateMutation.isPending ? 'Saving...' : 'Save Settings'}
@@ -196,7 +190,7 @@ export function Settings() {
         )}
 
         {testMutation.isSuccess && (
-          <div className="mt-4 p-3 bg-blue-50 text-blue-700 rounded-lg text-sm">
+          <div className="mt-4 p-3 bg-primary-50 text-primary-600 rounded-lg text-sm">
             Test notification sent!
           </div>
         )}

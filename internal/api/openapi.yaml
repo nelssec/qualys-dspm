@@ -1,0 +1,1263 @@
+openapi: 3.0.3
+info:
+  title: Qualys DSPM API
+  description: |
+    Data Security Posture Management API for discovering, classifying, and protecting sensitive data across cloud environments.
+
+    ## Authentication
+    All API endpoints (except /auth/login) require a JWT token. Include the token in the Authorization header:
+    ```
+    Authorization: Bearer <token>
+    ```
+
+    ## Getting Started
+    1. Login with `POST /api/v1/auth/login` to get a JWT token
+    2. Use the token to authenticate subsequent requests
+    3. Add a cloud account with `POST /api/v1/accounts`
+    4. Trigger a scan with `POST /api/v1/accounts/{accountID}/scan`
+  version: 1.0.0
+  contact:
+    name: DSPM Support
+  license:
+    name: Proprietary
+
+servers:
+  - url: /api/v1
+    description: API v1
+
+tags:
+  - name: Authentication
+    description: User authentication and session management
+  - name: Accounts
+    description: Cloud account management
+  - name: Assets
+    description: Data asset discovery and management
+  - name: Findings
+    description: Security findings and vulnerabilities
+  - name: Classifications
+    description: Data classification results
+  - name: Scans
+    description: Scan job management
+  - name: Rules
+    description: Custom classification rules
+  - name: Remediation
+    description: Auto-remediation actions
+  - name: AI Tracking
+    description: AI/ML service tracking and risk assessment
+  - name: Reports
+    description: Report generation
+  - name: Dashboard
+    description: Dashboard statistics
+
+paths:
+  /auth/login:
+    post:
+      tags: [Authentication]
+      summary: Login
+      description: Authenticate with username and password to receive JWT tokens
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                  example: admin
+                password:
+                  type: string
+                  format: password
+                  example: admin123
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: Invalid credentials
+
+  /auth/logout:
+    post:
+      tags: [Authentication]
+      summary: Logout
+      security: [BearerAuth: []]
+      responses:
+        '200':
+          description: Logout successful
+
+  /auth/me:
+    get:
+      tags: [Authentication]
+      summary: Get current user
+      security: [BearerAuth: []]
+      responses:
+        '200':
+          description: Current user info
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+
+  /accounts:
+    get:
+      tags: [Accounts]
+      summary: List cloud accounts
+      security: [BearerAuth: []]
+      responses:
+        '200':
+          description: List of accounts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountListResponse'
+    post:
+      tags: [Accounts]
+      summary: Add cloud account
+      security: [BearerAuth: []]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAccountRequest'
+      responses:
+        '201':
+          description: Account created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+
+  /accounts/{accountID}:
+    get:
+      tags: [Accounts]
+      summary: Get account details
+      security: [BearerAuth: []]
+      parameters:
+        - $ref: '#/components/parameters/AccountID'
+      responses:
+        '200':
+          description: Account details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+    delete:
+      tags: [Accounts]
+      summary: Delete account
+      security: [BearerAuth: []]
+      parameters:
+        - $ref: '#/components/parameters/AccountID'
+      responses:
+        '204':
+          description: Account deleted
+
+  /accounts/{accountID}/scan:
+    post:
+      tags: [Accounts, Scans]
+      summary: Trigger scan for account
+      description: Start a new scan job for the specified account
+      security: [BearerAuth: []]
+      parameters:
+        - $ref: '#/components/parameters/AccountID'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                scan_type:
+                  type: string
+                  enum: [FULL, QUICK, CLASSIFICATION]
+                  default: FULL
+                  description: Type of scan to perform
+      responses:
+        '202':
+          description: Scan started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  job_id:
+                    type: string
+                    format: uuid
+
+  /assets:
+    get:
+      tags: [Assets]
+      summary: List data assets
+      security: [BearerAuth: []]
+      parameters:
+        - name: account_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: resource_type
+          in: query
+          schema:
+            type: string
+            enum: [s3_bucket, rds_instance, dynamodb_table]
+        - name: sensitivity
+          in: query
+          schema:
+            type: string
+            enum: [CRITICAL, HIGH, MEDIUM, LOW, UNKNOWN]
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: List of assets
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetListResponse'
+
+  /assets/{assetID}:
+    get:
+      tags: [Assets]
+      summary: Get asset details
+      security: [BearerAuth: []]
+      parameters:
+        - $ref: '#/components/parameters/AssetID'
+      responses:
+        '200':
+          description: Asset details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Asset'
+
+  /assets/{assetID}/classifications:
+    get:
+      tags: [Assets, Classifications]
+      summary: Get classifications for asset
+      security: [BearerAuth: []]
+      parameters:
+        - $ref: '#/components/parameters/AssetID'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Asset classifications
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClassificationListResponse'
+
+  /findings:
+    get:
+      tags: [Findings]
+      summary: List security findings
+      security: [BearerAuth: []]
+      parameters:
+        - name: account_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: severity
+          in: query
+          schema:
+            type: string
+            enum: [CRITICAL, HIGH, MEDIUM, LOW, INFO]
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [open, resolved, suppressed]
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: List of findings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FindingListResponse'
+
+  /findings/{findingID}:
+    get:
+      tags: [Findings]
+      summary: Get finding details
+      security: [BearerAuth: []]
+      parameters:
+        - name: findingID
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Finding details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Finding'
+
+  /classifications:
+    get:
+      tags: [Classifications]
+      summary: List all classifications
+      security: [BearerAuth: []]
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+            enum: [PII, PHI, PCI, SECRETS]
+        - name: sensitivity
+          in: query
+          schema:
+            type: string
+            enum: [CRITICAL, HIGH, MEDIUM, LOW]
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: List of classifications
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClassificationListResponse'
+
+  /scans:
+    get:
+      tags: [Scans]
+      summary: List scan jobs
+      security: [BearerAuth: []]
+      parameters:
+        - name: account_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, running, completed, failed, cancelled]
+      responses:
+        '200':
+          description: List of scans
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanListResponse'
+
+  /scans/{scanID}:
+    get:
+      tags: [Scans]
+      summary: Get scan details
+      security: [BearerAuth: []]
+      parameters:
+        - name: scanID
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Scan details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Scan'
+
+  /scans/{scanID}/cancel:
+    post:
+      tags: [Scans]
+      summary: Cancel running scan
+      security: [BearerAuth: []]
+      parameters:
+        - name: scanID
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Scan cancelled
+
+  /rules:
+    get:
+      tags: [Rules]
+      summary: List classification rules
+      security: [BearerAuth: []]
+      responses:
+        '200':
+          description: List of rules
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuleListResponse'
+    post:
+      tags: [Rules]
+      summary: Create custom rule
+      security: [BearerAuth: []]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRuleRequest'
+      responses:
+        '201':
+          description: Rule created
+
+  /rules/templates:
+    get:
+      tags: [Rules]
+      summary: Get rule templates
+      security: [BearerAuth: []]
+      responses:
+        '200':
+          description: Available rule templates
+
+  /rules/test:
+    post:
+      tags: [Rules]
+      summary: Test rule pattern
+      security: [BearerAuth: []]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                pattern:
+                  type: string
+                test_data:
+                  type: string
+      responses:
+        '200':
+          description: Test results
+
+  /remediation:
+    get:
+      tags: [Remediation]
+      summary: List remediation actions
+      security: [BearerAuth: []]
+      parameters:
+        - name: account_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [PENDING, APPROVED, EXECUTING, COMPLETED, FAILED, REJECTED, ROLLED_BACK]
+      responses:
+        '200':
+          description: List of remediation actions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemediationListResponse'
+    post:
+      tags: [Remediation]
+      summary: Create remediation action
+      security: [BearerAuth: []]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRemediationRequest'
+      responses:
+        '201':
+          description: Action created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemediationAction'
+
+  /remediation/summary:
+    get:
+      tags: [Remediation]
+      summary: Get remediation summary
+      security: [BearerAuth: []]
+      parameters:
+        - name: account_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Remediation summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemediationSummary'
+
+  /remediation/definitions:
+    get:
+      tags: [Remediation]
+      summary: Get available action definitions
+      security: [BearerAuth: []]
+      responses:
+        '200':
+          description: Action definitions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ActionDefinition'
+
+  /remediation/playbooks:
+    get:
+      tags: [Remediation]
+      summary: Get remediation playbooks
+      security: [BearerAuth: []]
+      responses:
+        '200':
+          description: Available playbooks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Playbook'
+
+  /remediation/{actionID}:
+    get:
+      tags: [Remediation]
+      summary: Get action details
+      security: [BearerAuth: []]
+      parameters:
+        - $ref: '#/components/parameters/ActionID'
+      responses:
+        '200':
+          description: Action details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemediationAction'
+
+  /remediation/{actionID}/approve:
+    post:
+      tags: [Remediation]
+      summary: Approve pending action
+      security: [BearerAuth: []]
+      parameters:
+        - $ref: '#/components/parameters/ActionID'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                approved_by:
+                  type: string
+      responses:
+        '200':
+          description: Action approved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemediationAction'
+
+  /remediation/{actionID}/reject:
+    post:
+      tags: [Remediation]
+      summary: Reject pending action
+      security: [BearerAuth: []]
+      parameters:
+        - $ref: '#/components/parameters/ActionID'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Action rejected
+
+  /remediation/{actionID}/execute:
+    post:
+      tags: [Remediation]
+      summary: Execute approved action
+      security: [BearerAuth: []]
+      parameters:
+        - $ref: '#/components/parameters/ActionID'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                provider:
+                  type: string
+                  default: aws
+      responses:
+        '200':
+          description: Action executed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemediationAction'
+
+  /remediation/{actionID}/rollback:
+    post:
+      tags: [Remediation]
+      summary: Rollback completed action
+      security: [BearerAuth: []]
+      parameters:
+        - $ref: '#/components/parameters/ActionID'
+      responses:
+        '200':
+          description: Action rolled back
+
+  /ai/services:
+    get:
+      tags: [AI Tracking]
+      summary: List AI services
+      security: [BearerAuth: []]
+      parameters:
+        - name: account_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of AI services
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AIService'
+
+  /ai/models:
+    get:
+      tags: [AI Tracking]
+      summary: List AI models
+      security: [BearerAuth: []]
+      parameters:
+        - name: account_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of AI models
+
+  /ai/events:
+    get:
+      tags: [AI Tracking]
+      summary: List AI processing events
+      security: [BearerAuth: []]
+      parameters:
+        - name: account_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of AI events
+
+  /ai/risk-report:
+    get:
+      tags: [AI Tracking]
+      summary: Get AI risk report
+      security: [BearerAuth: []]
+      parameters:
+        - name: account_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: AI risk report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIRiskReport'
+
+  /dashboard/summary:
+    get:
+      tags: [Dashboard]
+      summary: Get dashboard summary
+      security: [BearerAuth: []]
+      responses:
+        '200':
+          description: Dashboard summary statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardSummary'
+
+  /reports/types:
+    get:
+      tags: [Reports]
+      summary: Get available report types
+      security: [BearerAuth: []]
+      responses:
+        '200':
+          description: Report types
+
+  /reports/generate:
+    post:
+      tags: [Reports]
+      summary: Generate report
+      security: [BearerAuth: []]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [report_type]
+              properties:
+                report_type:
+                  type: string
+                  enum: [executive, compliance, findings, assets]
+                format:
+                  type: string
+                  enum: [json, csv, pdf]
+                  default: json
+      responses:
+        '200':
+          description: Generated report
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    AccountID:
+      name: accountID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AssetID:
+      name: assetID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ActionID:
+      name: actionID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        default: 50
+        maximum: 1000
+    Offset:
+      name: offset
+      in: query
+      schema:
+        type: integer
+        default: 0
+
+  schemas:
+    LoginResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            access_token:
+              type: string
+            refresh_token:
+              type: string
+            expires_at:
+              type: string
+              format: date-time
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+
+    Account:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        provider:
+          type: string
+          enum: [aws, gcp, azure]
+        account_id:
+          type: string
+        status:
+          type: string
+        last_scan_at:
+          type: string
+          format: date-time
+        asset_count:
+          type: integer
+        finding_count:
+          type: integer
+
+    CreateAccountRequest:
+      type: object
+      required: [name, provider, credentials]
+      properties:
+        name:
+          type: string
+          example: Production AWS
+        provider:
+          type: string
+          enum: [aws, gcp, azure]
+        credentials:
+          type: object
+          properties:
+            role_arn:
+              type: string
+              description: IAM role ARN for cross-account access
+            external_id:
+              type: string
+            access_key_id:
+              type: string
+            secret_access_key:
+              type: string
+
+    Asset:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        account_id:
+          type: string
+          format: uuid
+        resource_type:
+          type: string
+        resource_arn:
+          type: string
+        name:
+          type: string
+        region:
+          type: string
+        sensitivity_level:
+          type: string
+          enum: [CRITICAL, HIGH, MEDIUM, LOW, UNKNOWN]
+        classification_count:
+          type: integer
+        finding_count:
+          type: integer
+        is_public:
+          type: boolean
+        encrypted:
+          type: boolean
+
+    Finding:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        account_id:
+          type: string
+          format: uuid
+        asset_id:
+          type: string
+          format: uuid
+        finding_type:
+          type: string
+        severity:
+          type: string
+          enum: [CRITICAL, HIGH, MEDIUM, LOW, INFO]
+        title:
+          type: string
+        description:
+          type: string
+        remediation:
+          type: string
+        status:
+          type: string
+          enum: [open, resolved, suppressed]
+        compliance_frameworks:
+          type: array
+          items:
+            type: string
+
+    Classification:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        asset_id:
+          type: string
+          format: uuid
+        rule_name:
+          type: string
+        category:
+          type: string
+          enum: [PII, PHI, PCI, SECRETS]
+        sensitivity:
+          type: string
+          enum: [CRITICAL, HIGH, MEDIUM, LOW]
+        object_path:
+          type: string
+        finding_count:
+          type: integer
+        confidence_score:
+          type: number
+
+    Scan:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        account_id:
+          type: string
+          format: uuid
+        scan_type:
+          type: string
+        status:
+          type: string
+          enum: [pending, running, completed, failed, cancelled]
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        assets_scanned:
+          type: integer
+        findings_count:
+          type: integer
+
+    RemediationAction:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        account_id:
+          type: string
+          format: uuid
+        asset_id:
+          type: string
+          format: uuid
+        finding_id:
+          type: string
+          format: uuid
+        action_type:
+          type: string
+        status:
+          type: string
+          enum: [PENDING, APPROVED, EXECUTING, COMPLETED, FAILED, REJECTED, ROLLED_BACK]
+        risk_level:
+          type: string
+          enum: [LOW, MEDIUM, HIGH]
+        description:
+          type: string
+        rollback_available:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    CreateRemediationRequest:
+      type: object
+      required: [account_id, asset_id, action_type]
+      properties:
+        account_id:
+          type: string
+          format: uuid
+        asset_id:
+          type: string
+          format: uuid
+        finding_id:
+          type: string
+          format: uuid
+        action_type:
+          type: string
+          enum: [ENABLE_BUCKET_ENCRYPTION, BLOCK_PUBLIC_ACCESS, ENABLE_VERSIONING, ENABLE_LOGGING, ENABLE_KMS_ROTATION, REVOKE_PUBLIC_ACL, UPGRADE_TLS]
+        description:
+          type: string
+        parameters:
+          type: object
+
+    RemediationSummary:
+      type: object
+      properties:
+        total_actions:
+          type: integer
+        pending_count:
+          type: integer
+        approved_count:
+          type: integer
+        completed_count:
+          type: integer
+        failed_count:
+          type: integer
+
+    ActionDefinition:
+      type: object
+      properties:
+        action_type:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        risk_level:
+          type: string
+        required_params:
+          type: array
+          items:
+            type: string
+        rollback_available:
+          type: boolean
+
+    Playbook:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        actions:
+          type: array
+          items:
+            type: string
+        risk_level:
+          type: string
+
+    AIService:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        account_id:
+          type: string
+          format: uuid
+        service_type:
+          type: string
+          enum: [BEDROCK, SAGEMAKER, COMPREHEND, REKOGNITION, TEXTRACT]
+        name:
+          type: string
+        region:
+          type: string
+        status:
+          type: string
+
+    AIRiskReport:
+      type: object
+      properties:
+        account_id:
+          type: string
+          format: uuid
+        total_ai_services:
+          type: integer
+        total_ai_models:
+          type: integer
+        models_accessing_sensitive:
+          type: integer
+        high_risk_events:
+          type: integer
+        recommendations:
+          type: array
+          items:
+            type: string
+
+    DashboardSummary:
+      type: object
+      properties:
+        accounts:
+          type: object
+          properties:
+            total:
+              type: integer
+            by_provider:
+              type: object
+        assets:
+          type: object
+          properties:
+            total:
+              type: integer
+            by_type:
+              type: object
+            by_sensitivity:
+              type: object
+        findings:
+          type: object
+          properties:
+            total:
+              type: integer
+            by_severity:
+              type: object
+            open:
+              type: integer
+        classifications:
+          type: object
+          properties:
+            total:
+              type: integer
+            by_category:
+              type: object
+
+    CreateRuleRequest:
+      type: object
+      required: [name, pattern, category]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        pattern:
+          type: string
+        category:
+          type: string
+          enum: [PII, PHI, PCI, SECRETS]
+        sensitivity:
+          type: string
+          enum: [CRITICAL, HIGH, MEDIUM, LOW]
+        enabled:
+          type: boolean
+          default: true
+
+    AccountListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Account'
+        meta:
+          $ref: '#/components/schemas/ListMeta'
+
+    AssetListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Asset'
+        meta:
+          $ref: '#/components/schemas/ListMeta'
+
+    FindingListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Finding'
+        meta:
+          $ref: '#/components/schemas/ListMeta'
+
+    ClassificationListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Classification'
+        meta:
+          $ref: '#/components/schemas/ListMeta'
+
+    ScanListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Scan'
+
+    RuleListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            type: object
+
+    RemediationListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/RemediationAction'
+        meta:
+          $ref: '#/components/schemas/ListMeta'
+
+    ListMeta:
+      type: object
+      properties:
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+
+security:
+  - BearerAuth: []

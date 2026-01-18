@@ -22,20 +22,12 @@ import {
 import { getDashboardSummary, getClassificationStats, getFindingStats } from '../api/client';
 import clsx from 'clsx';
 
-const SEVERITY_COLORS = {
-  CRITICAL: '#dc2626',
-  HIGH: '#ea580c',
-  MEDIUM: '#ca8a04',
-  LOW: '#16a34a',
-  INFO: '#6b7280',
-};
-
 const CATEGORY_COLORS = {
-  PII: '#3b82f6',
-  PHI: '#8b5cf6',
-  PCI: '#ec4899',
-  SECRETS: '#f97316',
-  CUSTOM: '#6b7280',
+  PII: '#1991e1',
+  PHI: '#7c3aed',
+  PCI: '#db2777',
+  SECRETS: '#e85d04',
+  CUSTOM: '#56707e',
 };
 
 export function Dashboard() {
@@ -57,7 +49,7 @@ export function Dashboard() {
   if (summaryLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500" />
       </div>
     );
   }
@@ -66,7 +58,7 @@ export function Dashboard() {
     ? Object.entries(classStats).map(([name, value]) => ({
         name,
         value,
-        color: CATEGORY_COLORS[name as keyof typeof CATEGORY_COLORS] || '#6b7280',
+        color: CATEGORY_COLORS[name as keyof typeof CATEGORY_COLORS] || '#56707e',
       }))
     : [];
 
@@ -80,10 +72,9 @@ export function Dashboard() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Dashboard</h1>
+      <h1 className="text-lg font-medium text-qualys-text-primary mb-5">Dashboard</h1>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatCard
           title="Cloud Accounts"
           value={summary?.accounts.total || 0}
@@ -116,72 +107,72 @@ export function Dashboard() {
         />
       </div>
 
-      {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        {/* Classification by Category */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        <div className="bg-white border border-qualys-border rounded shadow-qualys-sm p-5 min-w-0 overflow-hidden">
+          <h2 className="text-sm font-medium text-qualys-text-primary mb-4">
             Data Classification by Category
           </h2>
           {classificationData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={classificationData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={100}
-                  paddingAngle={2}
-                  dataKey="value"
-                  label={({ name, percent }) =>
-                    `${name} (${(percent * 100).toFixed(0)}%)`
-                  }
-                >
-                  {classificationData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
+            <div className="h-[280px] max-h-[280px] overflow-hidden">
+              <ResponsiveContainer width="100%" height={280}>
+                <PieChart>
+                  <Pie
+                    data={classificationData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={55}
+                    outerRadius={90}
+                    paddingAngle={2}
+                    dataKey="value"
+                    label={({ name, percent }) =>
+                      `${name} (${(percent * 100).toFixed(0)}%)`
+                    }
+                  >
+                    {classificationData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
           ) : (
-            <div className="flex items-center justify-center h-64 text-gray-500">
+            <div className="flex items-center justify-center h-64 text-qualys-text-muted text-sm">
               No classification data available
             </div>
           )}
         </div>
 
-        {/* Findings by Severity */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">
+        <div className="bg-white border border-qualys-border rounded shadow-qualys-sm p-5 min-w-0 overflow-hidden">
+          <h2 className="text-sm font-medium text-qualys-text-primary mb-4">
             Findings by Severity
           </h2>
           {findingData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={findingData} layout="vertical">
-                <XAxis type="number" />
-                <YAxis type="category" dataKey="severity" width={80} />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="open" name="Open" fill="#ef4444" />
-                <Bar dataKey="resolved" name="Resolved" fill="#22c55e" />
-              </BarChart>
-            </ResponsiveContainer>
+            <div className="h-[280px] max-h-[280px] overflow-hidden">
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={findingData} layout="vertical">
+                  <XAxis type="number" tick={{ fontSize: 11 }} />
+                  <YAxis type="category" dataKey="severity" width={70} tick={{ fontSize: 11 }} />
+                  <Tooltip />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  <Bar dataKey="open" name="Open" fill="#c41230" />
+                  <Bar dataKey="resolved" name="Resolved" fill="#2e7d32" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           ) : (
-            <div className="flex items-center justify-center h-64 text-gray-500">
+            <div className="flex items-center justify-center h-64 text-qualys-text-muted text-sm">
               No finding data available
             </div>
           )}
         </div>
       </div>
 
-      {/* Risk Summary */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">
+      <div className="bg-white border border-qualys-border rounded shadow-qualys-sm p-5">
+        <h2 className="text-sm font-medium text-qualys-text-primary mb-4">
           Risk Overview
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <RiskItem
             icon={Globe}
             title="Public Exposure"
@@ -220,28 +211,28 @@ interface StatCardProps {
 
 function StatCard({ title, value, subtitle, icon: Icon, color, alert }: StatCardProps) {
   const colorClasses = {
-    blue: 'bg-blue-50 text-blue-600',
-    green: 'bg-green-50 text-green-600',
-    orange: 'bg-orange-50 text-orange-600',
-    purple: 'bg-purple-50 text-purple-600',
+    blue: 'bg-primary-50 text-primary-600 border-primary-100',
+    green: 'bg-green-50 text-green-600 border-green-100',
+    orange: 'bg-orange-50 text-orange-600 border-orange-100',
+    purple: 'bg-purple-50 text-purple-600 border-purple-100',
   };
 
   return (
-    <div className="bg-white rounded-lg shadow p-6">
+    <div className="bg-white border border-qualys-border rounded shadow-qualys-sm p-4">
       <div className="flex items-center justify-between">
-        <div className={clsx('p-3 rounded-lg', colorClasses[color])}>
-          <Icon className="h-6 w-6" />
+        <div className={clsx('p-2 rounded border', colorClasses[color])}>
+          <Icon className="h-5 w-5" />
         </div>
         {alert && (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-severity-critical/10 text-severity-critical border border-severity-critical/20">
             Alert
           </span>
         )}
       </div>
-      <div className="mt-4">
-        <p className="text-3xl font-bold text-gray-900">{value.toLocaleString()}</p>
-        <p className="text-sm font-medium text-gray-500">{title}</p>
-        <p className="text-xs text-gray-400 mt-1">{subtitle}</p>
+      <div className="mt-3">
+        <p className="text-2xl font-medium text-qualys-text-primary">{value.toLocaleString()}</p>
+        <p className="text-xs font-medium text-qualys-text-secondary mt-0.5">{title}</p>
+        <p className="text-[11px] text-qualys-text-muted mt-1">{subtitle}</p>
       </div>
     </div>
   );
@@ -257,20 +248,20 @@ interface RiskItemProps {
 
 function RiskItem({ icon: Icon, title, description, count, severity }: RiskItemProps) {
   const severityClasses = {
-    critical: 'bg-red-100 text-red-800 border-red-200',
-    high: 'bg-orange-100 text-orange-800 border-orange-200',
-    medium: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-    low: 'bg-green-100 text-green-800 border-green-200',
+    critical: 'bg-severity-critical/5 text-severity-critical border-severity-critical/20',
+    high: 'bg-severity-high/5 text-severity-high border-severity-high/20',
+    medium: 'bg-severity-medium/5 text-severity-medium border-severity-medium/20',
+    low: 'bg-severity-low/5 text-severity-low border-severity-low/20',
   };
 
   return (
-    <div className={clsx('p-4 rounded-lg border', severityClasses[severity])}>
+    <div className={clsx('p-4 rounded border', severityClasses[severity])}>
       <div className="flex items-center">
-        <Icon className="h-5 w-5 mr-2" />
-        <span className="font-medium">{title}</span>
+        <Icon className="h-4 w-4 mr-2" />
+        <span className="text-sm font-medium">{title}</span>
       </div>
-      <p className="text-sm mt-1 opacity-75">{description}</p>
-      <p className="text-2xl font-bold mt-2">{count}</p>
+      <p className="text-[11px] mt-1 opacity-80">{description}</p>
+      <p className="text-xl font-medium mt-2">{count}</p>
     </div>
   );
 }

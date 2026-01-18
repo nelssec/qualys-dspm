@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Clock, Play, Pause, Trash2, Plus, RefreshCw } from 'lucide-react';
+import { Clock, Play, Trash2, Plus } from 'lucide-react';
 import { api, ScheduledJob } from '../api/client';
 
 export function ScheduledJobs() {
@@ -15,6 +15,15 @@ export function ScheduledJobs() {
 
   const createMutation = useMutation({
     mutationFn: api.createScheduledJob,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['scheduled-jobs'] });
+      setShowModal(false);
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<ScheduledJob> }) =>
+      api.updateScheduledJob(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['scheduled-jobs'] });
       setShowModal(false);
@@ -45,7 +54,7 @@ export function ScheduledJobs() {
         <h1 className="text-2xl font-bold text-gray-900">Scheduled Jobs</h1>
         <button
           onClick={() => { setEditingJob(null); setShowModal(true); }}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          className="flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600"
         >
           <Plus className="w-4 h-4" />
           Create Job
@@ -96,7 +105,7 @@ export function ScheduledJobs() {
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => runNowMutation.mutate(job.id)}
-                        className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                        className="p-1 text-primary-500 hover:bg-primary-50 rounded"
                         title="Run Now"
                       >
                         <Play className="w-4 h-4" />
@@ -124,7 +133,6 @@ export function ScheduledJobs() {
         </div>
       )}
 
-      {/* Create/Edit Modal */}
       {showModal && (
         <JobModal
           job={editingJob}
@@ -132,7 +140,7 @@ export function ScheduledJobs() {
           onClose={() => setShowModal(false)}
           onSave={(data) => {
             if (editingJob) {
-              // Update existing
+              updateMutation.mutate({ id: editingJob.id, data });
             } else {
               createMutation.mutate(data);
             }
@@ -175,7 +183,7 @@ function JobModal({ job, jobTypes, onClose, onSave }: JobModalProps) {
               type="text"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
               required
             />
           </div>
@@ -184,7 +192,7 @@ function JobModal({ job, jobTypes, onClose, onSave }: JobModalProps) {
             <textarea
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
               rows={2}
             />
           </div>
@@ -194,7 +202,7 @@ function JobModal({ job, jobTypes, onClose, onSave }: JobModalProps) {
               type="text"
               value={formData.schedule}
               onChange={(e) => setFormData({ ...formData, schedule: e.target.value })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 font-mono"
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 font-mono"
               placeholder="0 * * * *"
               required
             />
@@ -205,7 +213,7 @@ function JobModal({ job, jobTypes, onClose, onSave }: JobModalProps) {
             <select
               value={formData.job_type}
               onChange={(e) => setFormData({ ...formData, job_type: e.target.value })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
             >
               {jobTypes.map((type) => (
                 <option key={type.value} value={type.value}>{type.label}</option>
@@ -217,7 +225,7 @@ function JobModal({ job, jobTypes, onClose, onSave }: JobModalProps) {
               type="checkbox"
               checked={formData.enabled}
               onChange={(e) => setFormData({ ...formData, enabled: e.target.checked })}
-              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              className="h-4 w-4 text-primary-500 focus:ring-primary-500 border-gray-300 rounded"
             />
             <label className="ml-2 block text-sm text-gray-900">Enabled</label>
           </div>
@@ -231,7 +239,7 @@ function JobModal({ job, jobTypes, onClose, onSave }: JobModalProps) {
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              className="px-4 py-2 bg-primary-500 text-white rounded-md hover:bg-primary-600"
             >
               {job ? 'Update' : 'Create'}
             </button>

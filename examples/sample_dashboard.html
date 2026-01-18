@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=0.8">
+    <title>Qualys DSPM - Data Security Posture Management</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        qualys: {
+                            bg: '#f7f7f7',
+                            border: '#dae7f4',
+                            sidebar: '#0e1215',
+                            'sidebar-hover': '#364750',
+                            'sidebar-active': '#1a2328',
+                            accent: '#9dbfe1',
+                            'text-primary': '#333333',
+                            'text-secondary': '#56707e',
+                            'text-muted': '#8a9ba5',
+                        },
+                        primary: { 50: '#e8f4fc', 100: '#d1e9f9', 500: '#1991e1', 600: '#1474b4', 700: '#0f5787' },
+                        severity: { critical: '#c41230', high: '#e85d04', medium: '#f4a100', low: '#2e7d32', info: '#56707e' },
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Roboto', sans-serif; font-size: 13px; background-color: #f7f7f7; color: #333333; }
+        .view { display: none; }
+        .view.active { display: block; }
+        .asset-row { display: none; }
+        .asset-row.visible { display: table-row; }
+    </style>
+</head>
+<body class="min-h-screen">
+    <div class="fixed inset-y-0 left-0 w-56 bg-qualys-sidebar flex flex-col">
+        <div class="flex h-14 items-center px-4 border-b border-qualys-sidebar-hover">
+            <svg class="h-7 w-7 text-qualys-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+            </svg>
+            <div class="ml-2">
+                <span class="text-base font-medium text-white">Qualys</span>
+                <span class="text-[10px] text-qualys-accent ml-1 uppercase tracking-wider">DSPM</span>
+            </div>
+        </div>
+        <nav class="flex-1 py-4 px-2 overflow-y-auto">
+            <div class="mb-1 px-3 text-[10px] font-medium text-qualys-text-muted uppercase tracking-wider">Overview</div>
+            <a href="#" onclick="return showView('dashboard')" data-view="dashboard" class="nav-link flex items-center px-3 py-2 mt-0.5 rounded text-[13px] bg-qualys-sidebar-active text-white">
+                <svg class="mr-3 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"/></svg>
+                Dashboard
+            </a>
+            <a href="#" onclick="return showView('accounts')" data-view="accounts" class="nav-link flex items-center px-3 py-2 mt-0.5 rounded text-[13px] text-qualys-text-muted hover:bg-qualys-sidebar-hover hover:text-white">
+                <svg class="mr-3 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2"/></svg>
+                Accounts
+            </a>
+            <a href="#" onclick="return showView('assets')" data-view="assets" class="nav-link flex items-center px-3 py-2 mt-0.5 rounded text-[13px] text-qualys-text-muted hover:bg-qualys-sidebar-hover hover:text-white">
+                <svg class="mr-3 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+                Assets
+            </a>
+            <a href="#" onclick="return showView('findings')" data-view="findings" class="nav-link flex items-center px-3 py-2 mt-0.5 rounded text-[13px] text-qualys-text-muted hover:bg-qualys-sidebar-hover hover:text-white">
+                <svg class="mr-3 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                Findings
+            </a>
+            <div class="mt-6 mb-1 px-3 text-[10px] font-medium text-qualys-text-muted uppercase tracking-wider">Management</div>
+            <a href="#" onclick="return showView('jobs')" data-view="jobs" class="nav-link flex items-center px-3 py-2 mt-0.5 rounded text-[13px] text-qualys-text-muted hover:bg-qualys-sidebar-hover hover:text-white">
+                <svg class="mr-3 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                Scheduled Jobs
+            </a>
+            <a href="#" onclick="return showView('rules')" data-view="rules" class="nav-link flex items-center px-3 py-2 mt-0.5 rounded text-[13px] text-qualys-text-muted hover:bg-qualys-sidebar-hover hover:text-white">
+                <svg class="mr-3 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                Classification Rules
+            </a>
+            <a href="#" onclick="return showView('reports')" data-view="reports" class="nav-link flex items-center px-3 py-2 mt-0.5 rounded text-[13px] text-qualys-text-muted hover:bg-qualys-sidebar-hover hover:text-white">
+                <svg class="mr-3 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                Reports
+            </a>
+        </nav>
+    </div>
+
+    <div class="pl-56 min-w-0 overflow-x-hidden">
+        <main class="py-5 px-6 max-w-full overflow-hidden">
+
+            <div id="view-dashboard" class="view active">
+                <h1 class="text-lg font-medium text-qualys-text-primary mb-5">Dashboard</h1>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                    <div class="bg-white border border-qualys-border rounded shadow-sm p-4"><div class="text-xs font-medium text-qualys-text-secondary uppercase">Cloud Accounts</div><div class="mt-1 text-2xl font-semibold text-qualys-text-primary">4</div><div class="text-xs text-qualys-text-muted">3 active</div></div>
+                    <div class="bg-white border border-qualys-border rounded shadow-sm p-4"><div class="text-xs font-medium text-qualys-text-secondary uppercase">Data Assets</div><div class="mt-1 text-2xl font-semibold text-qualys-text-primary">1,247</div><div class="text-xs text-qualys-text-muted">127 with sensitive data</div></div>
+                    <div class="bg-white border border-qualys-border rounded shadow-sm p-4"><div class="text-xs font-medium text-qualys-text-secondary uppercase">Open Findings</div><div class="mt-1 text-2xl font-semibold text-severity-critical">89</div><div class="text-xs text-qualys-text-muted">27 critical</div></div>
+                    <div class="bg-white border border-qualys-border rounded shadow-sm p-4"><div class="text-xs font-medium text-qualys-text-secondary uppercase">Risk Score</div><div class="mt-1 text-2xl font-semibold text-severity-high">72</div><div class="text-xs text-qualys-text-muted">34 critical assets</div></div>
+                </div>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+                    <div class="bg-white border border-qualys-border rounded shadow-sm p-5 min-w-0 overflow-hidden">
+                        <h2 class="text-sm font-medium text-qualys-text-primary mb-4">Data Classification by Category</h2>
+                        <div style="position: relative; height: 240px; max-height: 240px; width: 100%; overflow: hidden;"><canvas id="classificationChart"></canvas></div>
+                    </div>
+                    <div class="bg-white border border-qualys-border rounded shadow-sm p-5 min-w-0 overflow-hidden">
+                        <h2 class="text-sm font-medium text-qualys-text-primary mb-4">Findings by Severity</h2>
+                        <div style="position: relative; height: 240px; max-height: 240px; width: 100%; overflow: hidden;"><canvas id="severityChart"></canvas></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="view-accounts" class="view">
+                <div class="flex items-center justify-between mb-5">
+                    <h1 class="text-lg font-medium text-qualys-text-primary">Cloud Accounts</h1>
+                    <button class="px-4 py-2 text-sm font-medium text-white bg-primary-500 rounded hover:bg-primary-600">Add Account</button>
+                </div>
+                <div class="bg-white border border-qualys-border rounded shadow-sm overflow-hidden">
+                    <table class="min-w-full divide-y divide-qualys-border">
+                        <thead class="bg-qualys-bg"><tr><th class="px-4 py-3 text-left text-[11px] font-medium text-qualys-text-secondary uppercase">Account</th><th class="px-4 py-3 text-left text-[11px] font-medium text-qualys-text-secondary uppercase">Provider</th><th class="px-4 py-3 text-left text-[11px] font-medium text-qualys-text-secondary uppercase">Status</th><th class="px-4 py-3 text-left text-[11px] font-medium text-qualys-text-secondary uppercase">Last Scan</th><th class="px-4 py-3 text-left text-[11px] font-medium text-qualys-text-secondary uppercase">Assets</th><th class="px-4 py-3"></th></tr></thead>
+                        <tbody class="divide-y divide-qualys-border">
+                            <tr class="hover:bg-qualys-bg"><td class="px-4 py-3"><div class="text-sm font-medium">Production AWS</div><div class="text-[11px] text-qualys-text-muted">123456789012</div></td><td class="px-4 py-3"><span class="text-sm">AWS</span></td><td class="px-4 py-3"><span class="px-2 py-0.5 text-[11px] font-medium rounded bg-severity-low/10 text-severity-low">Active</span></td><td class="px-4 py-3 text-sm">2 hours ago</td><td class="px-4 py-3 text-sm">847</td><td class="px-4 py-3"><button class="px-3 py-1 text-xs border border-qualys-border rounded hover:bg-qualys-bg">Scan</button></td></tr>
+                            <tr class="hover:bg-qualys-bg"><td class="px-4 py-3"><div class="text-sm font-medium">Azure Production</div><div class="text-[11px] text-qualys-text-muted">sub-abc123</div></td><td class="px-4 py-3"><span class="text-sm">Azure</span></td><td class="px-4 py-3"><span class="px-2 py-0.5 text-[11px] font-medium rounded bg-severity-low/10 text-severity-low">Active</span></td><td class="px-4 py-3 text-sm">5 hours ago</td><td class="px-4 py-3 text-sm">312</td><td class="px-4 py-3"><button class="px-3 py-1 text-xs border border-qualys-border rounded hover:bg-qualys-bg">Scan</button></td></tr>
+                            <tr class="hover:bg-qualys-bg"><td class="px-4 py-3"><div class="text-sm font-medium">GCP Analytics</div><div class="text-[11px] text-qualys-text-muted">analytics-prod</div></td><td class="px-4 py-3"><span class="text-sm">GCP</span></td><td class="px-4 py-3"><span class="px-2 py-0.5 text-[11px] font-medium rounded bg-severity-low/10 text-severity-low">Active</span></td><td class="px-4 py-3 text-sm">1 day ago</td><td class="px-4 py-3 text-sm">88</td><td class="px-4 py-3"><button class="px-3 py-1 text-xs border border-qualys-border rounded hover:bg-qualys-bg">Scan</button></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="view-assets" class="view">
+                <div class="flex items-center justify-between mb-5">
+                    <h1 class="text-lg font-medium text-qualys-text-primary">Data Assets</h1>
+                    <div class="text-xs text-qualys-text-muted"><span id="assets-total">1,247</span> total assets</div>
+                </div>
+                <div class="bg-white border border-qualys-border rounded shadow-sm p-4 mb-4">
+                    <div class="flex flex-wrap items-center gap-3">
+                        <input type="text" placeholder="Search assets..." class="flex-1 min-w-[200px] px-3 py-2 text-sm border border-qualys-border rounded">
+                        <select class="px-3 py-2 text-sm border border-qualys-border rounded"><option>All Sensitivities</option><option>Critical</option><option>High</option><option>Medium</option><option>Low</option></select>
+                    </div>
+                </div>
+                <div class="bg-white border border-qualys-border rounded shadow-sm overflow-hidden">
+                    <table class="min-w-full divide-y divide-qualys-border">
+                        <thead class="bg-qualys-bg"><tr><th class="px-4 py-3 text-left text-[11px] font-medium text-qualys-text-secondary uppercase">Asset</th><th class="px-4 py-3 text-left text-[11px] font-medium text-qualys-text-secondary uppercase">Type</th><th class="px-4 py-3 text-left text-[11px] font-medium text-qualys-text-secondary uppercase">Sensitivity</th><th class="px-4 py-3 text-left text-[11px] font-medium text-qualys-text-secondary uppercase">Classifications</th><th class="px-4 py-3 text-left text-[11px] font-medium text-qualys-text-secondary uppercase">Status</th></tr></thead>
+                        <tbody id="assets-table" class="divide-y divide-qualys-border"></tbody>
+                    </table>
+                    <div class="px-4 py-3 border-t border-qualys-border flex items-center justify-between">
+                        <div class="flex items-center gap-4">
+                            <div id="assets-showing" class="text-xs text-qualys-text-muted">Showing 1-25 of 1,247 assets</div>
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs text-qualys-text-muted">Show:</span>
+                                <select id="assets-page-size" onchange="changePageSize()" class="px-2 py-1 text-xs border border-qualys-border rounded">
+                                    <option value="25">25</option>
+                                    <option value="50">50</option>
+                                    <option value="100">100</option>
+                                    <option value="250">250</option>
+                                    <option value="0">All</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div id="assets-pagination" class="flex gap-1"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="view-findings" class="view">
+                <div class="flex items-center justify-between mb-5">
+                    <h1 class="text-lg font-medium text-qualys-text-primary">Security Findings</h1>
+                    <div class="text-xs text-qualys-text-muted">89 total findings</div>
+                </div>
+                <div class="bg-white border border-qualys-border rounded shadow-sm p-4 mb-4">
+                    <div class="flex flex-wrap items-center gap-3">
+                        <input type="text" placeholder="Search findings..." class="flex-1 min-w-[200px] px-3 py-2 text-sm border border-qualys-border rounded">
+                        <select class="px-3 py-2 text-sm border border-qualys-border rounded"><option>All Severities</option><option>Critical</option><option>High</option><option>Medium</option><option>Low</option></select>
+                        <select class="px-3 py-2 text-sm border border-qualys-border rounded"><option>All Statuses</option><option>Open</option><option>In Progress</option><option>Resolved</option></select>
+                    </div>
+                </div>
+                <div class="space-y-3">
+                    <div class="bg-white border border-qualys-border rounded shadow-sm p-4"><div class="flex items-center justify-between"><div class="flex items-center space-x-3"><span class="px-2 py-0.5 text-[11px] font-medium rounded border bg-severity-critical/10 text-severity-critical border-severity-critical/20">CRITICAL</span><div><h3 class="text-sm font-medium text-qualys-text-primary">Credit card numbers in plaintext CSV</h3><p class="text-[11px] text-qualys-text-muted">PCI_DATA • s3://prod-data/exports/</p></div></div><span class="text-xs text-severity-critical">open</span></div></div>
+                    <div class="bg-white border border-qualys-border rounded shadow-sm p-4"><div class="flex items-center justify-between"><div class="flex items-center space-x-3"><span class="px-2 py-0.5 text-[11px] font-medium rounded border bg-severity-critical/10 text-severity-critical border-severity-critical/20">CRITICAL</span><div><h3 class="text-sm font-medium text-qualys-text-primary">SSN data exposed in public bucket</h3><p class="text-[11px] text-qualys-text-muted">PII_DATA • s3://public-assets/reports/</p></div></div><span class="text-xs text-severity-critical">open</span></div></div>
+                    <div class="bg-white border border-qualys-border rounded shadow-sm p-4"><div class="flex items-center justify-between"><div class="flex items-center space-x-3"><span class="px-2 py-0.5 text-[11px] font-medium rounded border bg-severity-high/10 text-severity-high border-severity-high/20">HIGH</span><div><h3 class="text-sm font-medium text-qualys-text-primary">API keys found in configuration files</h3><p class="text-[11px] text-qualys-text-muted">SECRETS • s3://app-config/</p></div></div><span class="text-xs text-severity-critical">open</span></div></div>
+                    <div class="bg-white border border-qualys-border rounded shadow-sm p-4"><div class="flex items-center justify-between"><div class="flex items-center space-x-3"><span class="px-2 py-0.5 text-[11px] font-medium rounded border bg-severity-high/10 text-severity-high border-severity-high/20">HIGH</span><div><h3 class="text-sm font-medium text-qualys-text-primary">Medical records without encryption</h3><p class="text-[11px] text-qualys-text-muted">PHI_DATA • azure://healthcare-blob/</p></div></div><span class="text-xs text-severity-high">in_progress</span></div></div>
+                    <div class="bg-white border border-qualys-border rounded shadow-sm p-4"><div class="flex items-center justify-between"><div class="flex items-center space-x-3"><span class="px-2 py-0.5 text-[11px] font-medium rounded border bg-severity-medium/10 text-severity-medium border-severity-medium/20">MEDIUM</span><div><h3 class="text-sm font-medium text-qualys-text-primary">Email addresses in debug logs</h3><p class="text-[11px] text-qualys-text-muted">PII_DATA • gs://logs-bucket/</p></div></div><span class="text-xs text-severity-low">resolved</span></div></div>
+                </div>
+            </div>
+
+            <div id="view-jobs" class="view">
+                <div class="flex items-center justify-between mb-5">
+                    <h1 class="text-lg font-medium text-qualys-text-primary">Scheduled Jobs</h1>
+                    <button class="px-4 py-2 text-sm font-medium text-white bg-primary-500 rounded hover:bg-primary-600">Create Job</button>
+                </div>
+                <div class="bg-white border border-qualys-border rounded shadow-sm overflow-hidden">
+                    <table class="min-w-full divide-y divide-qualys-border">
+                        <thead class="bg-qualys-bg"><tr><th class="px-4 py-3 text-left text-[11px] font-medium text-qualys-text-secondary uppercase">Job Name</th><th class="px-4 py-3 text-left text-[11px] font-medium text-qualys-text-secondary uppercase">Schedule</th><th class="px-4 py-3 text-left text-[11px] font-medium text-qualys-text-secondary uppercase">Type</th><th class="px-4 py-3 text-left text-[11px] font-medium text-qualys-text-secondary uppercase">Last Run</th><th class="px-4 py-3 text-left text-[11px] font-medium text-qualys-text-secondary uppercase">Status</th><th class="px-4 py-3"></th></tr></thead>
+                        <tbody class="divide-y divide-qualys-border">
+                            <tr class="hover:bg-qualys-bg"><td class="px-4 py-3"><div class="text-sm font-medium">Daily Full Scan</div><div class="text-[11px] text-qualys-text-muted">Scan all accounts</div></td><td class="px-4 py-3 text-sm font-mono">0 2 * * *</td><td class="px-4 py-3 text-sm">scan_all_accounts</td><td class="px-4 py-3 text-sm">Today 2:00 AM</td><td class="px-4 py-3"><span class="px-2 py-0.5 text-[11px] font-medium rounded bg-severity-low/10 text-severity-low">Enabled</span></td><td class="px-4 py-3"><button class="px-3 py-1 text-xs border border-qualys-border rounded hover:bg-qualys-bg">Run Now</button></td></tr>
+                            <tr class="hover:bg-qualys-bg"><td class="px-4 py-3"><div class="text-sm font-medium">Hourly Critical Assets</div><div class="text-[11px] text-qualys-text-muted">Scan high-sensitivity assets</div></td><td class="px-4 py-3 text-sm font-mono">0 * * * *</td><td class="px-4 py-3 text-sm">scan_account</td><td class="px-4 py-3 text-sm">1 hour ago</td><td class="px-4 py-3"><span class="px-2 py-0.5 text-[11px] font-medium rounded bg-severity-low/10 text-severity-low">Enabled</span></td><td class="px-4 py-3"><button class="px-3 py-1 text-xs border border-qualys-border rounded hover:bg-qualys-bg">Run Now</button></td></tr>
+                            <tr class="hover:bg-qualys-bg"><td class="px-4 py-3"><div class="text-sm font-medium">Weekly Lineage Sync</div><div class="text-[11px] text-qualys-text-muted">Update data lineage</div></td><td class="px-4 py-3 text-sm font-mono">0 3 * * 0</td><td class="px-4 py-3 text-sm">sync_lineage</td><td class="px-4 py-3 text-sm">5 days ago</td><td class="px-4 py-3"><span class="px-2 py-0.5 text-[11px] font-medium rounded bg-severity-low/10 text-severity-low">Enabled</span></td><td class="px-4 py-3"><button class="px-3 py-1 text-xs border border-qualys-border rounded hover:bg-qualys-bg">Run Now</button></td></tr>
+                            <tr class="hover:bg-qualys-bg"><td class="px-4 py-3"><div class="text-sm font-medium">Monthly Report</div><div class="text-[11px] text-qualys-text-muted">Generate compliance report</div></td><td class="px-4 py-3 text-sm font-mono">0 8 1 * *</td><td class="px-4 py-3 text-sm">generate_report</td><td class="px-4 py-3 text-sm">Jan 1</td><td class="px-4 py-3"><span class="px-2 py-0.5 text-[11px] font-medium rounded bg-qualys-text-muted/20 text-qualys-text-muted">Disabled</span></td><td class="px-4 py-3"><button class="px-3 py-1 text-xs border border-qualys-border rounded hover:bg-qualys-bg">Run Now</button></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="view-rules" class="view">
+                <div class="flex items-center justify-between mb-5">
+                    <h1 class="text-lg font-medium text-qualys-text-primary">Classification Rules</h1>
+                    <button class="px-4 py-2 text-sm font-medium text-white bg-primary-500 rounded hover:bg-primary-600">Create Rule</button>
+                </div>
+                <div class="bg-white border border-qualys-border rounded shadow-sm overflow-hidden">
+                    <table class="min-w-full divide-y divide-qualys-border">
+                        <thead class="bg-qualys-bg"><tr><th class="px-4 py-3 text-left text-[11px] font-medium text-qualys-text-secondary uppercase">Rule Name</th><th class="px-4 py-3 text-left text-[11px] font-medium text-qualys-text-secondary uppercase">Category</th><th class="px-4 py-3 text-left text-[11px] font-medium text-qualys-text-secondary uppercase">Sensitivity</th><th class="px-4 py-3 text-left text-[11px] font-medium text-qualys-text-secondary uppercase">Patterns</th><th class="px-4 py-3 text-left text-[11px] font-medium text-qualys-text-secondary uppercase">Status</th><th class="px-4 py-3"></th></tr></thead>
+                        <tbody class="divide-y divide-qualys-border">
+                            <tr class="hover:bg-qualys-bg"><td class="px-4 py-3"><div class="text-sm font-medium">Credit Card Numbers</div><div class="text-[11px] text-qualys-text-muted">Visa, Mastercard, Amex</div></td><td class="px-4 py-3 text-sm">PCI</td><td class="px-4 py-3"><span class="px-2 py-0.5 text-[11px] font-medium rounded border bg-severity-critical/10 text-severity-critical border-severity-critical/20">CRITICAL</span></td><td class="px-4 py-3 text-sm font-mono text-xs">3 patterns</td><td class="px-4 py-3"><span class="px-2 py-0.5 text-[11px] font-medium rounded bg-severity-low/10 text-severity-low">Enabled</span></td><td class="px-4 py-3"><button class="px-3 py-1 text-xs border border-qualys-border rounded hover:bg-qualys-bg">Edit</button></td></tr>
+                            <tr class="hover:bg-qualys-bg"><td class="px-4 py-3"><div class="text-sm font-medium">Social Security Numbers</div><div class="text-[11px] text-qualys-text-muted">US SSN format</div></td><td class="px-4 py-3 text-sm">PII</td><td class="px-4 py-3"><span class="px-2 py-0.5 text-[11px] font-medium rounded border bg-severity-critical/10 text-severity-critical border-severity-critical/20">CRITICAL</span></td><td class="px-4 py-3 text-sm font-mono text-xs">1 pattern</td><td class="px-4 py-3"><span class="px-2 py-0.5 text-[11px] font-medium rounded bg-severity-low/10 text-severity-low">Enabled</span></td><td class="px-4 py-3"><button class="px-3 py-1 text-xs border border-qualys-border rounded hover:bg-qualys-bg">Edit</button></td></tr>
+                            <tr class="hover:bg-qualys-bg"><td class="px-4 py-3"><div class="text-sm font-medium">Email Addresses</div><div class="text-[11px] text-qualys-text-muted">Standard email format</div></td><td class="px-4 py-3 text-sm">PII</td><td class="px-4 py-3"><span class="px-2 py-0.5 text-[11px] font-medium rounded border bg-severity-medium/10 text-severity-medium border-severity-medium/20">MEDIUM</span></td><td class="px-4 py-3 text-sm font-mono text-xs">1 pattern</td><td class="px-4 py-3"><span class="px-2 py-0.5 text-[11px] font-medium rounded bg-severity-low/10 text-severity-low">Enabled</span></td><td class="px-4 py-3"><button class="px-3 py-1 text-xs border border-qualys-border rounded hover:bg-qualys-bg">Edit</button></td></tr>
+                            <tr class="hover:bg-qualys-bg"><td class="px-4 py-3"><div class="text-sm font-medium">AWS Access Keys</div><div class="text-[11px] text-qualys-text-muted">AKIA pattern</div></td><td class="px-4 py-3 text-sm">SECRETS</td><td class="px-4 py-3"><span class="px-2 py-0.5 text-[11px] font-medium rounded border bg-severity-critical/10 text-severity-critical border-severity-critical/20">CRITICAL</span></td><td class="px-4 py-3 text-sm font-mono text-xs">1 pattern</td><td class="px-4 py-3"><span class="px-2 py-0.5 text-[11px] font-medium rounded bg-severity-low/10 text-severity-low">Enabled</span></td><td class="px-4 py-3"><button class="px-3 py-1 text-xs border border-qualys-border rounded hover:bg-qualys-bg">Edit</button></td></tr>
+                            <tr class="hover:bg-qualys-bg"><td class="px-4 py-3"><div class="text-sm font-medium">Custom Employee ID</div><div class="text-[11px] text-qualys-text-muted">Internal format</div></td><td class="px-4 py-3 text-sm">PII</td><td class="px-4 py-3"><span class="px-2 py-0.5 text-[11px] font-medium rounded border bg-severity-low/10 text-severity-low border-severity-low/20">LOW</span></td><td class="px-4 py-3 text-sm font-mono text-xs">2 patterns</td><td class="px-4 py-3"><span class="px-2 py-0.5 text-[11px] font-medium rounded bg-qualys-text-muted/20 text-qualys-text-muted">Disabled</span></td><td class="px-4 py-3"><button class="px-3 py-1 text-xs border border-qualys-border rounded hover:bg-qualys-bg">Edit</button></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="view-reports" class="view">
+                <h1 class="text-lg font-medium text-qualys-text-primary mb-5">Generate Reports</h1>
+                <div class="bg-white border border-qualys-border rounded shadow-sm p-5 mb-4">
+                    <div class="mb-6">
+                        <label class="block text-xs font-medium text-qualys-text-secondary uppercase mb-3">Report Type</label>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            <button class="p-3 rounded border-2 border-primary-500 bg-primary-50 text-left"><div class="text-sm font-medium">Findings</div><div class="text-[11px] text-qualys-text-muted">Security findings report</div></button>
+                            <button class="p-3 rounded border border-qualys-border text-left hover:border-primary-300"><div class="text-sm font-medium">Assets</div><div class="text-[11px] text-qualys-text-muted">Asset inventory</div></button>
+                            <button class="p-3 rounded border border-qualys-border text-left hover:border-primary-300"><div class="text-sm font-medium">Classification</div><div class="text-[11px] text-qualys-text-muted">Data classification summary</div></button>
+                            <button class="p-3 rounded border border-qualys-border text-left hover:border-primary-300"><div class="text-sm font-medium">Compliance</div><div class="text-[11px] text-qualys-text-muted">Compliance status</div></button>
+                        </div>
+                    </div>
+                    <div class="mb-6">
+                        <label class="block text-xs font-medium text-qualys-text-secondary uppercase mb-3">Format</label>
+                        <div class="flex gap-3">
+                            <button class="px-4 py-2 rounded border-2 border-primary-500 bg-primary-50 text-sm">CSV</button>
+                            <button class="px-4 py-2 rounded border border-qualys-border text-sm hover:border-primary-300">PDF</button>
+                        </div>
+                    </div>
+                    <div class="mb-6">
+                        <label class="block text-xs font-medium text-qualys-text-secondary uppercase mb-2">Date Range</label>
+                        <div class="flex gap-4">
+                            <div><label class="block text-[11px] text-qualys-text-muted mb-1">From</label><input type="date" class="px-3 py-2 text-sm border border-qualys-border rounded"></div>
+                            <div><label class="block text-[11px] text-qualys-text-muted mb-1">To</label><input type="date" class="px-3 py-2 text-sm border border-qualys-border rounded"></div>
+                        </div>
+                    </div>
+                    <div class="flex justify-end">
+                        <button class="px-4 py-2 text-sm font-medium text-white bg-primary-500 rounded hover:bg-primary-600">Generate Report</button>
+                    </div>
+                </div>
+                <div class="bg-white border border-qualys-border rounded shadow-sm p-5">
+                    <h3 class="text-sm font-medium text-qualys-text-primary mb-2">Quick Export</h3>
+                    <p class="text-[11px] text-qualys-text-muted mb-4">Download raw data exports</p>
+                    <div class="flex gap-3">
+                        <button class="px-4 py-2 text-sm bg-qualys-bg border border-qualys-border rounded hover:bg-qualys-border/50">All Findings (CSV)</button>
+                        <button class="px-4 py-2 text-sm bg-qualys-bg border border-qualys-border rounded hover:bg-qualys-border/50">All Assets (CSV)</button>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <script>
+        const sampleAssets = [];
+        const bucketNames = ['prod-data', 'analytics', 'backups', 'logs', 'configs', 'exports', 'raw-data', 'processed', 'archive', 'temp'];
+        const regions = ['us-east-1', 'us-west-2', 'eu-west-1', 'ap-southeast-1'];
+        const sensitivities = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
+        const categories = ['PII', 'PCI', 'PHI', 'SECRETS', 'None'];
+
+        for (let i = 1; i <= 127; i++) {
+            const bucket = bucketNames[Math.floor(Math.random() * bucketNames.length)];
+            const region = regions[Math.floor(Math.random() * regions.length)];
+            const sensitivity = sensitivities[Math.floor(Math.random() * sensitivities.length)];
+            const category = categories[Math.floor(Math.random() * categories.length)];
+            const isPublic = Math.random() < 0.1;
+            const classCount = Math.floor(Math.random() * 20);
+            sampleAssets.push({
+                name: `${bucket}-${String(i).padStart(3, '0')}`,
+                arn: `arn:aws:s3:::${bucket}-${String(i).padStart(3, '0')}`,
+                region: region,
+                sensitivity: sensitivity,
+                category: category,
+                isPublic: isPublic,
+                classCount: classCount
+            });
+        }
+
+        let currentPage = 1;
+        let pageSize = 25;
+
+        function renderAssets() {
+            const tbody = document.getElementById('assets-table');
+            const total = sampleAssets.length;
+            const start = pageSize === 0 ? 0 : (currentPage - 1) * pageSize;
+            const end = pageSize === 0 ? total : Math.min(start + pageSize, total);
+            const visibleAssets = sampleAssets.slice(start, end);
+
+            const sensitivityClasses = {
+                CRITICAL: 'bg-severity-critical/10 text-severity-critical border-severity-critical/20',
+                HIGH: 'bg-severity-high/10 text-severity-high border-severity-high/20',
+                MEDIUM: 'bg-severity-medium/10 text-severity-medium border-severity-medium/20',
+                LOW: 'bg-severity-low/10 text-severity-low border-severity-low/20'
+            };
+
+            tbody.innerHTML = visibleAssets.map(asset => `
+                <tr class="hover:bg-qualys-bg">
+                    <td class="px-4 py-3"><div class="text-sm font-medium">${asset.name}</div><div class="text-[11px] text-qualys-text-muted truncate max-w-md">${asset.arn}</div></td>
+                    <td class="px-4 py-3"><span class="text-sm">S3 Bucket</span><div class="text-[11px] text-qualys-text-muted">${asset.region}</div></td>
+                    <td class="px-4 py-3"><span class="px-2 py-0.5 text-[11px] font-medium rounded border ${sensitivityClasses[asset.sensitivity]}">${asset.sensitivity}</span></td>
+                    <td class="px-4 py-3"><div class="text-sm">${asset.classCount} findings</div><div class="text-[11px] text-qualys-text-muted">${asset.category}</div></td>
+                    <td class="px-4 py-3">${asset.isPublic ? '<span class="text-xs text-severity-critical">Public</span>' : '<span class="text-xs text-severity-low">Private</span>'}</td>
+                </tr>
+            `).join('');
+
+            document.getElementById('assets-showing').textContent = pageSize === 0
+                ? `Showing all ${total} assets`
+                : `Showing ${start + 1}-${end} of ${total} assets`;
+
+            renderPagination(total);
+        }
+
+        function renderPagination(total) {
+            const container = document.getElementById('assets-pagination');
+            if (pageSize === 0) { container.innerHTML = ''; return; }
+
+            const totalPages = Math.ceil(total / pageSize);
+            let html = `<button onclick="goToPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled class="px-3 py-1 text-xs border border-qualys-border rounded opacity-50"' : 'class="px-3 py-1 text-xs border border-qualys-border rounded hover:bg-qualys-bg"'}>Previous</button>`;
+
+            const pages = [];
+            if (totalPages <= 7) {
+                for (let i = 1; i <= totalPages; i++) pages.push(i);
+            } else {
+                pages.push(1);
+                if (currentPage > 3) pages.push('...');
+                for (let i = Math.max(2, currentPage - 1); i <= Math.min(totalPages - 1, currentPage + 1); i++) pages.push(i);
+                if (currentPage < totalPages - 2) pages.push('...');
+                pages.push(totalPages);
+            }
+
+            pages.forEach(p => {
+                if (p === '...') {
+                    html += '<span class="px-2 py-1 text-xs text-qualys-text-muted">...</span>';
+                } else {
+                    html += `<button onclick="goToPage(${p})" class="px-3 py-1 text-xs rounded ${p === currentPage ? 'bg-primary-500 text-white' : 'border border-qualys-border hover:bg-qualys-bg'}">${p}</button>`;
+                }
+            });
+
+            html += `<button onclick="goToPage(${currentPage + 1})" ${currentPage >= totalPages ? 'disabled class="px-3 py-1 text-xs border border-qualys-border rounded opacity-50"' : 'class="px-3 py-1 text-xs border border-qualys-border rounded hover:bg-qualys-bg"'}>Next</button>`;
+            container.innerHTML = html;
+        }
+
+        function goToPage(page) {
+            const totalPages = Math.ceil(sampleAssets.length / pageSize);
+            if (page < 1 || page > totalPages) return;
+            currentPage = page;
+            renderAssets();
+        }
+
+        function changePageSize() {
+            pageSize = parseInt(document.getElementById('assets-page-size').value);
+            currentPage = 1;
+            renderAssets();
+        }
+
+        function showView(viewName) {
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.querySelectorAll('.nav-link').forEach(l => {
+                l.classList.remove('bg-qualys-sidebar-active', 'text-white');
+                l.classList.add('text-qualys-text-muted');
+            });
+            document.getElementById('view-' + viewName).classList.add('active');
+            const activeLink = document.querySelector(`[data-view="${viewName}"]`);
+            if (activeLink) {
+                activeLink.classList.remove('text-qualys-text-muted');
+                activeLink.classList.add('bg-qualys-sidebar-active', 'text-white');
+            }
+            return false;
+        }
+
+        new Chart(document.getElementById('classificationChart'), {
+            type: 'doughnut',
+            data: {
+                labels: ['PII', 'PCI', 'PHI', 'Secrets', 'Other'],
+                datasets: [{ data: [45, 25, 15, 10, 5], backgroundColor: ['#1991e1', '#c41230', '#2e7d32', '#e85d04', '#8a9ba5'], borderWidth: 0 }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { boxWidth: 12, padding: 15, font: { size: 11 } } } } }
+        });
+
+        new Chart(document.getElementById('severityChart'), {
+            type: 'bar',
+            data: {
+                labels: ['Critical', 'High', 'Medium', 'Low', 'Info'],
+                datasets: [
+                    { label: 'Open', data: [27, 15, 32, 12, 3], backgroundColor: '#c41230', borderRadius: 2 },
+                    { label: 'Resolved', data: [12, 23, 45, 28, 8], backgroundColor: '#2e7d32', borderRadius: 2 }
+                ]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top', align: 'end', labels: { boxWidth: 12, padding: 15 } } }, scales: { x: { grid: { display: false } }, y: { beginAtZero: true, grid: { color: '#e7ecee' } } } }
+        });
+
+        renderAssets();
+    </script>
+</body>
+</html>

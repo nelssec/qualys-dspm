@@ -49,16 +49,15 @@ export function Rules() {
         <h1 className="text-2xl font-bold text-gray-900">Classification Rules</h1>
         <button
           onClick={() => { setEditingRule(null); setShowModal(true); }}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          className="flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600"
         >
           <Plus className="w-4 h-4" />
           Create Rule
         </button>
       </div>
 
-      {/* Templates Section */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <h3 className="font-medium text-blue-900 mb-2">Quick Start Templates</h3>
+      <div className="bg-primary-50 border border-primary-100 rounded-lg p-4">
+        <h3 className="font-medium text-primary-700 mb-2">Quick Start Templates</h3>
         <div className="flex flex-wrap gap-2">
           {templates?.map((template: any) => (
             <button
@@ -74,7 +73,7 @@ export function Rules() {
                 } as CustomRule);
                 setShowModal(true);
               }}
-              className="px-3 py-1 bg-white border border-blue-300 rounded text-sm text-blue-700 hover:bg-blue-100"
+              className="px-3 py-1 bg-white border border-primary-300 rounded text-sm text-primary-600 hover:bg-primary-100"
             >
               {template.name}
             </button>
@@ -158,7 +157,7 @@ export function Rules() {
                       />
                       <button
                         onClick={() => testMutation.mutate({ rule, content: testContent })}
-                        className="mt-2 px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 flex items-center gap-1"
+                        className="mt-2 px-3 py-1 bg-primary-500 text-white text-sm rounded hover:bg-primary-600 flex items-center gap-1"
                       >
                         <Play className="w-4 h-4" /> Test
                       </button>
@@ -198,7 +197,6 @@ export function Rules() {
         </div>
       )}
 
-      {/* Create/Edit Modal */}
       {showModal && (
         <RuleModal
           rule={editingRule}
@@ -254,7 +252,7 @@ function RuleModal({ rule, categories, sensitivities, onClose, onSave }: RuleMod
                 type="text"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
                 required
               />
             </div>
@@ -264,7 +262,7 @@ function RuleModal({ rule, categories, sensitivities, onClose, onSave }: RuleMod
                 type="number"
                 value={formData.priority}
                 onChange={(e) => setFormData({ ...formData, priority: parseInt(e.target.value) })}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
                 min="0"
                 max="100"
               />
@@ -275,7 +273,7 @@ function RuleModal({ rule, categories, sensitivities, onClose, onSave }: RuleMod
             <textarea
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
               rows={2}
             />
           </div>
@@ -285,7 +283,7 @@ function RuleModal({ rule, categories, sensitivities, onClose, onSave }: RuleMod
               <select
                 value={formData.category}
                 onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
               >
                 {categories.map((cat) => (
                   <option key={cat} value={cat}>{cat.toUpperCase()}</option>
@@ -297,7 +295,7 @@ function RuleModal({ rule, categories, sensitivities, onClose, onSave }: RuleMod
               <select
                 value={formData.sensitivity}
                 onChange={(e) => setFormData({ ...formData, sensitivity: e.target.value })}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
               >
                 {sensitivities.map((sens) => (
                   <option key={sens} value={sens}>{sens.charAt(0).toUpperCase() + sens.slice(1)}</option>
@@ -312,7 +310,7 @@ function RuleModal({ rule, categories, sensitivities, onClose, onSave }: RuleMod
             <textarea
               value={formData.patterns}
               onChange={(e) => setFormData({ ...formData, patterns: e.target.value })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 font-mono text-sm"
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 font-mono text-sm"
               rows={4}
               placeholder="\\b\\d{3}-\\d{2}-\\d{4}\\b"
               required
@@ -325,7 +323,7 @@ function RuleModal({ rule, categories, sensitivities, onClose, onSave }: RuleMod
             <textarea
               value={formData.context_patterns}
               onChange={(e) => setFormData({ ...formData, context_patterns: e.target.value })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 font-mono text-sm"
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 font-mono text-sm"
               rows={3}
               placeholder="(?i)ssn|social\\s*security"
             />
@@ -336,7 +334,7 @@ function RuleModal({ rule, categories, sensitivities, onClose, onSave }: RuleMod
                 type="checkbox"
                 checked={formData.context_required}
                 onChange={(e) => setFormData({ ...formData, context_required: e.target.checked })}
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                className="h-4 w-4 text-primary-500 focus:ring-primary-500 border-gray-300 rounded"
               />
               <span className="ml-2 text-sm text-gray-900">Context Required</span>
             </label>
@@ -345,7 +343,7 @@ function RuleModal({ rule, categories, sensitivities, onClose, onSave }: RuleMod
                 type="checkbox"
                 checked={formData.enabled}
                 onChange={(e) => setFormData({ ...formData, enabled: e.target.checked })}
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                className="h-4 w-4 text-primary-500 focus:ring-primary-500 border-gray-300 rounded"
               />
               <span className="ml-2 text-sm text-gray-900">Enabled</span>
             </label>
@@ -360,7 +358,7 @@ function RuleModal({ rule, categories, sensitivities, onClose, onSave }: RuleMod
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              className="px-4 py-2 bg-primary-500 text-white rounded-md hover:bg-primary-600"
             >
               {rule?.id ? 'Update' : 'Create'}
             </button>

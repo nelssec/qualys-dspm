@@ -6,8 +6,7 @@ import {
   Trash2,
   Play,
   CheckCircle,
-  XCircle,
-  Clock
+  XCircle
 } from 'lucide-react';
 import { getAccounts, createAccount, deleteAccount, triggerScan } from '../api/client';
 import type { Provider, ScanType } from '../types';
@@ -67,7 +66,6 @@ export function Accounts() {
         </button>
       </div>
 
-      {/* Accounts Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {isLoading ? (
           <div className="col-span-full flex items-center justify-center h-64">
@@ -159,7 +157,6 @@ export function Accounts() {
         )}
       </div>
 
-      {/* Add Account Modal */}
       {showAddModal && (
         <AddAccountModal onClose={() => setShowAddModal(false)} />
       )}

@@ -8,7 +8,13 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - DB_PASSWORD=dspm_password
+      - DATABASE_URL=postgres://dspm:dspm_password@postgres:5432/dspm?sslmode=disable
+      - REDIS_URL=redis://redis:6379
+      - NEO4J_URL=bolt://neo4j:7687
+      - NEO4J_USER=neo4j
+      - NEO4J_PASSWORD=neo4j_password
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
     volumes:
       - ./config.yaml:/app/config.yaml:ro
     depends_on:
@@ -17,6 +23,11 @@ services:
       redis:
         condition: service_started
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   postgres:
     image: postgres:16-alpine

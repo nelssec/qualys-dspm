@@ -1,0 +1,5 @@
+ID,Severity,Title,Asset,Category,Status,Compliance,Detected
+finding-001,CRITICAL,"Unencrypted SSN data detected in S3 bucket",arn:aws:s3:::customer-data-prod,PII,open,"[GDPR-Art32 SOC2-CC6.1 PCI-DSS-3.4]",2026-01-16T14:10:35-08:00
+finding-002,CRITICAL,"Credit card numbers logged in application logs",arn:aws:s3:::app-logs-prod,PCI,in_progress,"[PCI-DSS-3.4 PCI-DSS-10.2]",2026-01-16T11:10:35-08:00
+finding-003,CRITICAL,"AWS access keys exposed in public bucket",arn:aws:s3:::deployments-config,SECRETS,open,"[CIS-AWS-1.14 SOC2-CC6.1]",2026-01-15T16:10:35-08:00
+finding-004,HIGH,"PHI data lacks field-level encryption",arn:aws:rds:us-east-1:123456789:db:healthcare-db,PHI,open,"[HIPAA-164.312(a)(1) HIPAA-164.312(e)(1)]",2026-01-16T15:10:35-08:00

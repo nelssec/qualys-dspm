@@ -10,13 +10,15 @@ import (
 )
 
 type Rule struct {
-	Name            string
-	Category        models.Category
-	Sensitivity     models.Sensitivity
-	Patterns        []*regexp.Regexp
-	ContextPatterns []*regexp.Regexp // Patterns that must appear nearby
-	ContextRequired bool             // If true, requires context pattern match
-	Validators      []Validator      // Additional validation functions
+	Name             string
+	Category         models.Category
+	Sensitivity      models.Sensitivity
+	Patterns         []*regexp.Regexp
+	ContextPatterns  []*regexp.Regexp // Patterns that must appear nearby
+	NegativePatterns []*regexp.Regexp // Patterns that should NOT appear nearby (exclusions)
+	ContextRequired  bool             // If true, requires context pattern match
+	ContextDistance  int              // Max chars from match to check for context (0 = whole file)
+	Validators       []Validator      // Additional validation functions
 }
 
 type Validator func(match string) bool
@@ -29,6 +31,18 @@ type Match struct {
 	Count       int
 	LineNumbers []int
 	Confidence  float64
+	// Enhanced match details for remediation
+	SampleMatches []SampleMatch // Up to 5 sample matches with context
+	ColumnName    string        // Column/field name if detected (for CSV/JSON)
+}
+
+// SampleMatch represents a single match with its context
+type SampleMatch struct {
+	LineNumber   int    // 1-based line number
+	ColumnNumber int    // 1-based column position
+	ColumnName   string // Header/field name if available
+	MaskedValue  string // The matched value, masked for security
+	Context      string // Surrounding text (also masked)
 }
 
 type Result struct {
@@ -77,12 +91,29 @@ func (c *Classifier) Classify(content string) *Result {
 				Confidence:  1.0, // Default confidence
 			}
 
+			// Build sample matches with full context (up to 5)
 			for i, m := range matches {
 				if i == 0 {
 					match.Value = redact(m.value)
+					if m.colName != "" {
+						match.ColumnName = m.colName
+					}
 				}
 				match.LineNumbers = append(match.LineNumbers, m.lineNum)
-				if i >= 10 {
+
+				// Add sample match with context (limit to 5)
+				if i < 5 {
+					sample := SampleMatch{
+						LineNumber:   m.lineNum,
+						ColumnNumber: m.colNum,
+						ColumnName:   m.colName,
+						MaskedValue:  redact(m.value),
+						Context:      redactContext(m.context, m.value),
+					}
+					match.SampleMatches = append(match.SampleMatches, sample)
+				}
+
+				if len(match.LineNumbers) >= 10 {
 					break // Limit stored line numbers
 				}
 			}
@@ -105,46 +136,152 @@ func (c *Classifier) Classify(content string) *Result {
 }
 
 type rawMatch struct {
-	value   string
-	lineNum int
+	value      string
+	lineNum    int
+	colNum     int    // 1-based column position
+	colName    string // Column header if CSV
+	context    string // Surrounding text
+	lineText   string // Full line for context extraction
 }
 
 func (c *Classifier) findMatches(content string, lines []string, rule *Rule) []rawMatch {
 	var matches []rawMatch
 
-	contextFound := !rule.ContextRequired
-	if rule.ContextRequired && len(rule.ContextPatterns) > 0 {
+	// For global context check (ContextDistance == 0), check entire content
+	globalContextFound := !rule.ContextRequired
+	if rule.ContextRequired && rule.ContextDistance == 0 && len(rule.ContextPatterns) > 0 {
 		lowerContent := strings.ToLower(content)
 		for _, cp := range rule.ContextPatterns {
 			if cp.MatchString(lowerContent) {
-				contextFound = true
+				globalContextFound = true
 				break
 			}
 		}
 	}
 
-	if !contextFound {
+	if !globalContextFound && rule.ContextDistance == 0 {
 		return nil
 	}
 
+	// Try to detect CSV headers from first line
+	var csvHeaders []string
+	if len(lines) > 0 && strings.Contains(lines[0], ",") {
+		csvHeaders = strings.Split(lines[0], ",")
+		for i := range csvHeaders {
+			csvHeaders[i] = strings.TrimSpace(csvHeaders[i])
+		}
+	}
+
+	// Pre-calculate line offsets for local context checking
+	lineOffsets := make([]int, len(lines)+1)
+	offset := 0
+	for i, line := range lines {
+		lineOffsets[i] = offset
+		offset += len(line) + 1 // +1 for newline
+	}
+	lineOffsets[len(lines)] = offset
+
 	for lineNum, line := range lines {
 		for _, pattern := range rule.Patterns {
-			found := pattern.FindAllString(line, -1)
-			for _, match := range found {
+			foundIndexes := pattern.FindAllStringIndex(line, -1)
+			for _, idx := range foundIndexes {
+				matchValue := line[idx[0]:idx[1]]
+
 				valid := true
 				for _, validator := range rule.Validators {
-					if !validator(match) {
+					if !validator(matchValue) {
 						valid = false
 						break
 					}
 				}
 
-				if valid {
-					matches = append(matches, rawMatch{
-						value:   match,
-						lineNum: lineNum + 1,
-					})
+				if !valid {
+					continue
 				}
+
+				// For local context checking (ContextDistance > 0)
+				if rule.ContextRequired && rule.ContextDistance > 0 && len(rule.ContextPatterns) > 0 {
+					// Get content around the match
+					matchPos := lineOffsets[lineNum] + idx[0]
+					contextStart := matchPos - rule.ContextDistance
+					if contextStart < 0 {
+						contextStart = 0
+					}
+					contextEnd := matchPos + idx[1] - idx[0] + rule.ContextDistance
+					if contextEnd > len(content) {
+						contextEnd = len(content)
+					}
+					localContext := strings.ToLower(content[contextStart:contextEnd])
+
+					localContextFound := false
+					for _, cp := range rule.ContextPatterns {
+						if cp.MatchString(localContext) {
+							localContextFound = true
+							break
+						}
+					}
+					if !localContextFound {
+						continue
+					}
+				}
+
+				// Check negative patterns (exclusions)
+				if len(rule.NegativePatterns) > 0 {
+					// Get broader context for exclusion check
+					contextStart := idx[0] - 100
+					if contextStart < 0 {
+						contextStart = 0
+					}
+					contextEnd := idx[1] + 100
+					if contextEnd > len(line) {
+						contextEnd = len(line)
+					}
+					broadContext := strings.ToLower(line[contextStart:contextEnd])
+
+					excluded := false
+					for _, np := range rule.NegativePatterns {
+						if np.MatchString(broadContext) {
+							excluded = true
+							break
+						}
+					}
+					if excluded {
+						continue
+					}
+				}
+
+				// Calculate column position (1-based)
+				colNum := idx[0] + 1
+
+				// Try to find column name for CSV
+				colName := ""
+				if len(csvHeaders) > 0 && lineNum > 0 {
+					// Count commas before the match to determine column
+					commaCount := strings.Count(line[:idx[0]], ",")
+					if commaCount < len(csvHeaders) {
+						colName = csvHeaders[commaCount]
+					}
+				}
+
+				// Extract context (30 chars before and after, masked)
+				contextStart := idx[0] - 30
+				if contextStart < 0 {
+					contextStart = 0
+				}
+				contextEnd := idx[1] + 30
+				if contextEnd > len(line) {
+					contextEnd = len(line)
+				}
+				context := line[contextStart:contextEnd]
+
+				matches = append(matches, rawMatch{
+					value:    matchValue,
+					lineNum:  lineNum + 1,
+					colNum:   colNum,
+					colName:  colName,
+					context:  context,
+					lineText: line,
+				})
 			}
 		}
 	}
@@ -171,15 +308,34 @@ func DefaultRules() []*Rule {
 			Patterns: []*regexp.Regexp{
 				regexp.MustCompile(`\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b`),
 			},
+			NegativePatterns: []*regexp.Regexp{
+				// Exclude system/automated/noreply emails
+				regexp.MustCompile(`(?i)(noreply|no-reply|donotreply|notifications?@|alerts?@|system@|admin@|support@|info@|contact@|mailer@|postmaster@|hostmaster@|webmaster@)`),
+				// Exclude example/test domains
+				regexp.MustCompile(`(?i)@(example|test|localhost|invalid|sample)\.(com|org|net|local)`),
+				// Exclude database connection strings (postgresql://user:pass@host, mongodb+srv://user:pass@host, etc.)
+				regexp.MustCompile(`(?i)(://[^@\s]*@|redis://|mongodb://|mongodb\+srv://|postgresql://|postgres://|mysql://)`),
+			},
 		},
 		{
 			Name:        "PHONE_US",
 			Category:    models.CategoryPII,
 			Sensitivity: models.SensitivityMedium,
 			Patterns: []*regexp.Regexp{
-				regexp.MustCompile(`\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b`),
+				// Require separators to avoid matching random 10-digit numbers
+				regexp.MustCompile(`\b\d{3}[-.\s]\d{3}[-.\s]\d{4}\b`),
 				regexp.MustCompile(`\b\(\d{3}\)\s?\d{3}[-.\s]?\d{4}\b`),
 			},
+			ContextPatterns: []*regexp.Regexp{
+				regexp.MustCompile(`(?i)(phone|tel|cell|mobile|fax|contact|call)`),
+			},
+			NegativePatterns: []*regexp.Regexp{
+				// Exclude IP-like patterns, version numbers, timestamps
+				regexp.MustCompile(`(?i)(ip|address|port|version|timestamp|serial|order|invoice|reference)`),
+			},
+			ContextRequired: true, // Require phone-related context
+			ContextDistance: 150,  // Context must be within 150 chars
+			Validators:      []Validator{ValidateUSPhone},
 		},
 		{
 			Name:        "ADDRESS_US",
@@ -188,6 +344,15 @@ func DefaultRules() []*Rule {
 			Patterns: []*regexp.Regexp{
 				regexp.MustCompile(`(?i)\b\d+\s+[A-Za-z]+\s+(Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Drive|Dr|Lane|Ln|Way|Court|Ct)\b`),
 			},
+			ContextPatterns: []*regexp.Regexp{
+				regexp.MustCompile(`(?i)(address|mailing|residence|shipping|billing|location|live|home)`),
+			},
+			NegativePatterns: []*regexp.Regexp{
+				// Exclude code paths, file paths, variable names
+				regexp.MustCompile(`(?i)(path|file|folder|directory|url|endpoint)`),
+			},
+			ContextRequired: true,
+			ContextDistance: 200,
 		},
 		{
 			Name:        "DOB",
@@ -198,8 +363,13 @@ func DefaultRules() []*Rule {
 				regexp.MustCompile(`\b(19|20)\d{2}[-/](0?[1-9]|1[0-2])[-/](0?[1-9]|[12]\d|3[01])\b`),
 			},
 			ContextPatterns: []*regexp.Regexp{
-				regexp.MustCompile(`(?i)(dob|birth|born|birthday)`),
+				regexp.MustCompile(`(?i)(dob|birth|born|birthday|date.of.birth)`),
 			},
+			NegativePatterns: []*regexp.Regexp{
+				regexp.MustCompile(`(?i)(version|release|updated|created|modified|timestamp)`),
+			},
+			ContextRequired: true,  // Only match dates when birth-related context is present
+			ContextDistance: 200,   // Context must be within 200 chars of the match (local check)
 		},
 		{
 			Name:        "PASSPORT",
@@ -228,12 +398,21 @@ func DefaultRules() []*Rule {
 			Category:    models.CategoryPHI,
 			Sensitivity: models.SensitivityHigh,
 			Patterns: []*regexp.Regexp{
-				regexp.MustCompile(`\b[A-TV-Z]\d{2}(\.\d{1,4})?\b`),
+				// ICD-10 codes: Letter + 2 digits + optional decimal + 1-4 digits
+				// More restrictive: require decimal for longer codes
+				regexp.MustCompile(`\b[A-TV-Z]\d{2}\.\d{1,4}\b`),
+				regexp.MustCompile(`\b[A-TV-Z]\d{2}\b`), // Short form without decimal
 			},
 			ContextPatterns: []*regexp.Regexp{
-				regexp.MustCompile(`(?i)(diagnosis|icd|condition|dx)`),
+				regexp.MustCompile(`(?i)(diagnosis|icd|icd-10|condition|dx|medical|clinical|patient)`),
+			},
+			NegativePatterns: []*regexp.Regexp{
+				// Exclude version strings, platform names, product codes
+				regexp.MustCompile(`(?i)(version|platform|gaia|firmware|release|model|sku|part.?number|serial)`),
+				regexp.MustCompile(`(?i)(sfp|1gb|10gb|100gb|longwave|shortwave|multi.?mode|single.?mode)`),
 			},
 			ContextRequired: true,
+			ContextDistance: 300, // Context must be within 300 chars (local check)
 		},
 		{
 			Name:        "NDC",
@@ -243,8 +422,10 @@ func DefaultRules() []*Rule {
 				regexp.MustCompile(`\b\d{5}-\d{4}-\d{2}\b`),
 			},
 			ContextPatterns: []*regexp.Regexp{
-				regexp.MustCompile(`(?i)(ndc|drug|medication|prescription|rx)`),
+				regexp.MustCompile(`(?i)(ndc|drug|medication|prescription|rx|pharmacy|dosage)`),
 			},
+			ContextRequired: true,
+			ContextDistance: 200,
 		},
 
 		{
@@ -268,9 +449,17 @@ func DefaultRules() []*Rule {
 				regexp.MustCompile(`\b\d{8,17}\b`),
 			},
 			ContextPatterns: []*regexp.Regexp{
-				regexp.MustCompile(`(?i)(account\s*number|bank\s*account|checking|savings|acct)`),
+				// Require explicit banking context
+				regexp.MustCompile(`(?i)(bank\s*account|checking\s*(account)?|savings\s*(account)?|account\s*#|acct\s*#|wire\s*transfer)`),
+			},
+			NegativePatterns: []*regexp.Regexp{
+				// Exclude AWS account numbers, ECR URIs, docker registries
+				regexp.MustCompile(`(?i)(\.ecr\.|\.dkr\.|amazonaws|docker|registry|arn:aws|aws_account)`),
+				// Exclude other technical identifiers
+				regexp.MustCompile(`(?i)(instance.?id|volume.?id|snapshot.?id|resource.?id|request.?id|trace.?id|span.?id)`),
 			},
 			ContextRequired: true,
+			ContextDistance: 150, // Context must be within 150 chars (local check)
 		},
 		{
 			Name:        "ROUTING_NUMBER",
@@ -280,9 +469,14 @@ func DefaultRules() []*Rule {
 				regexp.MustCompile(`\b\d{9}\b`),
 			},
 			ContextPatterns: []*regexp.Regexp{
-				regexp.MustCompile(`(?i)(routing|aba|transit)`),
+				regexp.MustCompile(`(?i)(routing\s*(number)?|aba\s*(number)?|bank\s*transit)`),
+			},
+			NegativePatterns: []*regexp.Regexp{
+				// Exclude SSN-like patterns, phone numbers, zip codes
+				regexp.MustCompile(`(?i)(ssn|social|phone|zip|postal|timestamp|id)`),
 			},
 			ContextRequired: true,
+			ContextDistance: 100,
 			Validators:      []Validator{ValidateABARouting},
 		},
 		{
@@ -376,7 +570,12 @@ func DefaultRules() []*Rule {
 			Sensitivity: models.SensitivityCritical,
 			Patterns: []*regexp.Regexp{
 				regexp.MustCompile(`\b(mysql|postgresql|postgres|mongodb|redis)://[^:]+:[^@]+@`),
-				regexp.MustCompile(`(?i)password\s*=\s*[^\s&;]+`),
+			},
+			NegativePatterns: []*regexp.Regexp{
+				// Exclude already-masked/redacted values (contain asterisks or placeholder patterns)
+				regexp.MustCompile(`\*{3,}`),
+				// Exclude documentation describing password fields
+				regexp.MustCompile(`(?i)(\(required\)|\(optional\)|password\s+for\s+t)`),
 			},
 		},
 		{
@@ -384,14 +583,56 @@ func DefaultRules() []*Rule {
 			Category:    models.CategorySecrets,
 			Sensitivity: models.SensitivityHigh,
 			Patterns: []*regexp.Regexp{
-				regexp.MustCompile(`\b[a-zA-Z0-9]{32,64}\b`),
+				// Require mix of letters and numbers to avoid hashes, UUIDs
+				regexp.MustCompile(`\b[a-zA-Z][a-zA-Z0-9]{31,63}\b`),
 			},
 			ContextPatterns: []*regexp.Regexp{
-				regexp.MustCompile(`(?i)(api[_-]?key|apikey|x-api-key|authorization\s*:\s*bearer)`),
+				// More specific context - must have "key" nearby
+				regexp.MustCompile(`(?i)(api[_-]?key\s*[=:]|apikey\s*[=:]|x-api-key\s*[=:]|secret\s*key\s*[=:])`),
+			},
+			NegativePatterns: []*regexp.Regexp{
+				// Exclude common hashes, UUIDs, checksums
+				regexp.MustCompile(`(?i)(sha256|sha1|md5|hash|checksum|digest|uuid|guid|etag)`),
+				// Exclude base64 encoded data
+				regexp.MustCompile(`(?i)(base64|encoded|encryption)`),
 			},
 			ContextRequired: true,
+			ContextDistance: 50, // Very close context required
 		},
 	}
+}
+
+func ValidateUSPhone(phone string) bool {
+	// Extract digits only
+	var digits strings.Builder
+	for _, c := range phone {
+		if unicode.IsDigit(c) {
+			digits.WriteRune(c)
+		}
+	}
+	clean := digits.String()
+
+	if len(clean) != 10 {
+		return false
+	}
+
+	// Area code cannot start with 0 or 1
+	if clean[0] == '0' || clean[0] == '1' {
+		return false
+	}
+
+	// Exchange (middle 3 digits) cannot start with 0 or 1
+	if clean[3] == '0' || clean[3] == '1' {
+		return false
+	}
+
+	// Reject obvious test/fake numbers
+	if clean == "1234567890" || clean == "0000000000" ||
+		clean == "1111111111" || clean == "5555555555" {
+		return false
+	}
+
+	return true
 }
 
 func ValidateSSN(ssn string) bool {
@@ -511,6 +752,60 @@ func redact(value string) string {
 		return "****"
 	}
 	return value[:2] + strings.Repeat("*", len(value)-4) + value[len(value)-2:]
+}
+
+// Patterns for additional sensitive data that should be masked in context
+var sensitiveContextPatterns = []*regexp.Regexp{
+	// SSN patterns (XXX-XX-XXXX or XXX XX XXXX)
+	regexp.MustCompile(`\b\d{3}[-\s]\d{2}[-\s]\d{4}\b`),
+	// Phone numbers (XXX-XXX-XXXX, (XXX) XXX-XXXX, XXX.XXX.XXXX)
+	regexp.MustCompile(`\b\d{3}[-.\s]\d{3}[-.\s]\d{4}\b`),
+	regexp.MustCompile(`\(\d{3}\)\s?\d{3}[-.\s]?\d{4}`),
+	// Email addresses
+	regexp.MustCompile(`\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b`),
+	// Dates (MM/DD/YYYY, MM-DD-YYYY, YYYY-MM-DD) - potential DOB
+	regexp.MustCompile(`\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b`),
+	regexp.MustCompile(`\b\d{4}[/-]\d{1,2}[/-]\d{1,2}\b`),
+	// Street addresses (number + street name)
+	regexp.MustCompile(`\b\d+\s+[A-Za-z]+\s+(St|Street|Ave|Avenue|Rd|Road|Dr|Drive|Ln|Lane|Blvd|Boulevard|Way|Ct|Court|Pl|Place|Cir|Circle)\b`),
+	// Bank account numbers (8-17 digits)
+	regexp.MustCompile(`\b\d{8,17}\b`),
+	// Credit card-like patterns
+	regexp.MustCompile(`\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b`),
+	// Long alphanumeric strings that might be secrets (32+ chars)
+	regexp.MustCompile(`\b[A-Za-z0-9+/=]{32,}\b`),
+	// Password-like values after = or :
+	regexp.MustCompile(`(?i)(?:password|passwd|pwd|secret|key|token)\s*[=:]\s*\S+`),
+	// Names after common labels (first name, last name patterns)
+	regexp.MustCompile(`(?i)(?:name|first|last|customer|patient|user)[:\s]+[A-Z][a-z]+`),
+}
+
+// redactContext masks the sensitive value AND any other potentially sensitive patterns in the context string
+func redactContext(context, sensitiveValue string) string {
+	if context == "" {
+		return context
+	}
+
+	result := context
+
+	// First, mask the primary sensitive value
+	if sensitiveValue != "" {
+		masked := redact(sensitiveValue)
+		result = strings.ReplaceAll(result, sensitiveValue, masked)
+	}
+
+	// Then, mask any other sensitive patterns found in the context
+	for _, pattern := range sensitiveContextPatterns {
+		result = pattern.ReplaceAllStringFunc(result, func(match string) string {
+			// Don't double-mask if already contains asterisks
+			if strings.Contains(match, "*") {
+				return match
+			}
+			return redact(match)
+		})
+	}
+
+	return result
 }
 
 func compareSensitivity(a, b models.Sensitivity) int {

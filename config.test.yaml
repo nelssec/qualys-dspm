@@ -1,0 +1,42 @@
+server:
+  host: "0.0.0.0"
+  port: 8080
+
+database:
+  host: "localhost"
+  port: 5432
+  user: "postgres"
+  password: "postgres"
+  database: "dspm_test"
+  sslmode: "disable"
+
+redis:
+  host: "localhost"
+  port: 6379
+  database: 0
+
+neo4j:
+  uri: "bolt://localhost:7687"
+  user: "neo4j"
+  password: "password"
+
+scanner:
+  workers: 5
+  max_file_size: 104857600  # 100MB
+  sample_size: 1048576       # 1MB
+  enabled_providers:
+    - AWS
+  batch_size: 50
+
+classification:
+  confidence_threshold: 0.7
+  enable_ml: true
+  review_threshold: 0.5
+
+aws:
+  region: "us-east-1"
+  # Credentials from environment variables
+
+logging:
+  level: "info"
+  format: "json"

@@ -1,0 +1,43 @@
+server:
+  host: "0.0.0.0"
+  port: 8080
+  read_timeout: 30s
+  write_timeout: 30s
+
+database:
+  host: "${DB_HOST}"
+  port: 5432
+  user: "${DB_USER}"
+  password: "${DB_PASSWORD}"
+  database: "${DB_NAME}"
+  ssl_mode: "require"
+  max_open_conns: 25
+  max_idle_conns: 5
+
+redis:
+  host: "${REDIS_HOST}"
+  port: 6379
+
+neo4j:
+  uri: "bolt://${NEO4J_HOST}:7687"
+  user: "neo4j"
+  password: "${NEO4J_PASSWORD}"
+
+scanner:
+  workers: 10
+  batch_size: 100
+  scan_timeout: 5m
+  max_file_size: 104857600
+  sample_size: 1048576
+  files_per_bucket: 1000
+  random_sample_pct: 0.10
+  enabled_providers:
+    - AWS
+
+aws:
+  region: "${AWS_REGION}"
+
+auth:
+  jwt_secret: "${JWT_SECRET}"
+  access_token_expiry: 15m
+  refresh_token_expiry: 168h
